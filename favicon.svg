@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Outer container box -->
+  <rect x="5" y="5" width="90" height="90" rx="12" stroke="#333" stroke-width="4" fill="none" />
+  
+  <!-- 
+    Grid: 4x4. Cell: 16. Gap: 2.
+    Cols: 15, 33, 51, 69
+    Rows: 15, 33, 51, 69
+    2x1 Width: 34
+  -->
+
+  <!-- Row 0 -->
+  <rect x="15" y="15" width="34" height="16" rx="3" fill="#4F46E5" /> <!-- Indigo (2x1) -->
+  <rect x="51" y="15" width="16" height="16" rx="3" fill="#10B981" /> <!-- Emerald -->
+  <rect x="69" y="15" width="16" height="16" rx="3" fill="#F59E0B" /> <!-- Amber -->
+
+  <!-- Row 1 -->
+  <rect x="15" y="33" width="16" height="16" rx="3" fill="#EF4444" /> <!-- Red -->
+  <rect x="33" y="33" width="34" height="16" rx="3" fill="#8B5CF6" /> <!-- Violet (2x1) -->
+  <rect x="69" y="33" width="16" height="16" rx="3" fill="#EC4899" /> <!-- Pink -->
+
+  <!-- Row 2 -->
+  <rect x="15" y="51" width="16" height="16" rx="3" fill="#06B6D4" /> <!-- Cyan -->
+  <rect x="33" y="51" width="16" height="16" rx="3" fill="#F97316" /> <!-- Orange -->
+  <rect x="51" y="51" width="34" height="16" rx="3" fill="#14B8A6" /> <!-- Teal (2x1) -->
+
+  <!-- Row 3 -->
+  <rect x="15" y="69" width="34" height="16" rx="3" fill="#6366F1" /> <!-- Indigo (2x1) -->
+  <rect x="51" y="69" width="16" height="16" rx="3" fill="#84CC16" /> <!-- Lime -->
+  <rect x="69" y="69" width="16" height="16" rx="3" fill="#E11D48" /> <!-- Rose -->
+
+</svg>

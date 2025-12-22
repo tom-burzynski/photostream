@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<title>{{ title }}</title>
+<!-- Prefetch adjacent photo pages for faster navigation -->
+<link rel="prefetch" href="{{ prev_page }}">
+<link rel="prefetch" href="{{ next_page }}">
+<style>
+  html, body { margin:0; height:100%; background:{{ bg_color }}; }
+  .stage { position:fixed; inset:0; overflow:hidden; background:{{ bg_color }}; }
+  /* Full-viewport navigation overlay zones */
+  .nav-overlay { position:fixed; inset:0; z-index:1; pointer-events:none; }
+  .nav-zone { position:absolute; top:0; bottom:0; pointer-events:auto; cursor:pointer; }
+
+  /* Zone layout: 50% left, 50% right */
+  .nav-left { left:0; width:50%; }
+  .nav-right { right:0; width:50%; }
+
+  /* Navigation chevron indicators */
+  .nav-zone::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 7.5rem;
+    color: {{ text_color }};
+    opacity: 0;
+    pointer-events: none;
+    z-index: 3;
+    font-family: monospace;
+    font-weight: bold;
+    text-shadow: 0 0 12px {{ bg_color }}, 0 0 24px {{ bg_color }};
+    will-change: opacity;
+  }
+
+  .nav-left::after {
+    content: '‹';
+    left: 2rem;
+  }
+
+  .nav-right::after {
+    content: '›';
+    right: 2rem;
+  }
+
+  /* Show chevrons on hover and focus - ONLY on devices with hover capability */
+  @media (hover: hover) and (pointer: fine) {
+    .nav-left:hover::after,
+    .nav-left:focus-within::after,
+    .nav-right:hover::after,
+    .nav-right:focus-within::after {
+      opacity: 0.7;
+    }
+
+    /* Subtle animation for chevron appearance */
+    .nav-zone::after {
+      transition: opacity 0.3s ease-out;
+    }
+  }
+
+  /* On touch devices, disable hover effects entirely */
+  @media (hover: none) and (pointer: coarse) {
+    .nav-zone::after {
+      opacity: 0 !important;
+      transition: none !important;
+    }
+
+    /* Disable any hover/active states */
+    .nav-zone:hover::after,
+    .nav-zone:active::after,
+    .nav-zone:focus-within::after {
+      opacity: 0 !important;
+    }
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .nav-zone::after {
+      transition: opacity 0.1s ease-out;
+    }
+  }
+
+  /* Centered image (no longer clickable - navigation handled by overlay) */
+  .center { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:0; }
+  .center img {
+    display:block;
+    max-width:100vw;
+    max-height:100vh;
+    width:auto; height:auto;
+    object-fit:contain;
+    border:1px solid {{ accent_color }};
+  }
+
+  /* Progressive loading: scale preview to match full-size display dimensions */
+  .center img[data-full-src] {
+    /* Force preview to scale based on original dimensions while respecting viewport */
+    width: {{ img_width }}px;
+    height: {{ img_height }}px;
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+  }
+
+  /* Progressive image loading: smooth transition from preview to full-size */
+  @media (prefers-reduced-motion: no-preference) {
+    .center img {
+      transition: opacity 0.3s ease-out;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .center img {
+      transition: opacity 0.15s ease-out;
+    }
+  }
+
+  /* Fade-in animation fallback for browsers without View Transitions support */
+  @supports not (view-transition-name: none) {
+    .center img {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .center img {
+        transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+      }
+      .center img.loaded {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .center img {
+        transition: opacity 0.2s ease-out;
+      }
+      .center img.loaded {
+        opacity: 1;
+      }
+    }
+  }
+
+  /* Swipe gesture visual feedback */
+  .center.swiping {
+    transition: none !important;
+  }
+  .center img.swiping {
+    transition: none !important;
+  }
+
+  /* View Transitions API disabled - using overlay instead */
+
+  /* Location+timestamp overlay at bottom of photo */
+  .photo-info {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 1rem;
+    color: {{ text_color }};
+    text-align: center;
+    text-shadow: 0 0 8px {{ bg_color }}, 0 0 16px {{ bg_color }}, 0 0 24px {{ bg_color }};
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 768px) {
+    .photo-info {
+      font-size: 0.85rem;
+      bottom: 1.5rem;
+    }
+  }
+
+</style>
+<script>
+// Clean up any old slide direction from sessionStorage
+(function() {
+  sessionStorage.removeItem('slideDirection');
+})();
+</script>
+<body>
+<div class="stage">
+  <!-- Centered image (background) -->
+  <div class="center">
+    <img src="{{ preview_src }}" data-full-src="{{ img_src }}" alt="{{ alt }}">
+  </div>
+
+  <!-- Full-viewport navigation overlay -->
+  <div class="nav-overlay">
+    <div class="nav-zone nav-left" data-nav="prev" data-url="{{ prev_page }}" data-photo-id="{{ prev_id }}" role="button" aria-label="Previous photo" tabindex="0"></div>
+    <div class="nav-zone nav-right" data-nav="next" data-url="{{ next_page }}" data-photo-id="{{ next_id }}" role="button" aria-label="Next photo" tabindex="0"></div>
+  </div>
+
+  <!-- Location and timestamp overlay -->
+  {% if location_city and location_country and photo_date and photo_time %}
+  <div class="photo-info">{{ location_city }}, {{ location_country }} on {{ photo_date }} at {{ photo_time }}</div>
+  {% elif location_city and photo_date and photo_time %}
+  <div class="photo-info">{{ location_city }} on {{ photo_date }} at {{ photo_time }}</div>
+  {% elif photo_date and photo_time %}
+  <div class="photo-info">{{ photo_date }} at {{ photo_time }}</div>
+  {% else %}
+  <div class="photo-info">{{ title }}</div>
+  {% endif %}
+</div>
+<script>
+// Progressive image loading: start with preview, upgrade to full-size
+(function() {
+  const img = document.querySelector('.center img');
+  if (!img) return;
+
+  const fullSrc = img.dataset.fullSrc;
+  const previewSrc = img.src;
+
+  // If we're already showing the full-size image, skip progressive loading
+  if (!fullSrc || img.src === fullSrc) {
+    // Fallback fade-in for browsers without View Transitions
+    if (!document.startViewTransition) {
+      const handleLoad = () => {
+        setTimeout(() => img.classList.add('loaded'), 100);
+      };
+
+      if (img.complete && img.naturalHeight !== 0) {
+        handleLoad();
+      } else {
+        img.addEventListener('load', handleLoad, { once: true });
+        setTimeout(() => {
+          if (!img.classList.contains('loaded')) img.classList.add('loaded');
+        }, 2000);
+      }
+    }
+    return;
+  }
+
+  // Progressive loading: preview → full-size
+  // Simple approach: just swap src and let CSS handle it
+  const fullImg = new Image();
+  fullImg.onload = () => {
+    // Remove the data attribute and inline dimension styles before swapping
+    img.removeAttribute('data-full-src');
+    img.style.width = '';
+    img.style.height = '';
+
+    // Swap to full-size image
+    img.src = fullSrc;
+  };
+
+  // Start loading full-size image
+  fullImg.src = fullSrc;
+})();
+
+// Fade-in animation for browsers without View Transitions support
+if (!document.startViewTransition) {
+  const img = document.querySelector('.center img');
+  if (img) {
+    const handleLoad = () => {
+      setTimeout(() => img.classList.add('loaded'), 100);
+    };
+
+    if (img.complete && img.naturalHeight !== 0) {
+      handleLoad();
+    } else {
+      img.addEventListener('load', handleLoad, { once: true });
+      setTimeout(() => {
+        if (!img.classList.contains('loaded')) img.classList.add('loaded');
+      }, 2000);
+    }
+  }
+}
+
+// Navigation system - handles both clicks and swipes
+(function() {
+  const centerDiv = document.querySelector('.center');
+  const img = document.querySelector('.center img');
+  const navZones = document.querySelectorAll('.nav-zone');
+
+  if (!centerDiv || !img || !navZones.length) return;
+
+  // Detect if touch device
+  const isTouchDevice = 'ontouchstart' in window;
+
+  // Touch state
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchMoved = false;
+  let touchHandled = false;
+
+  // Thresholds
+  const MIN_SWIPE_DISTANCE = 50;
+  const MIN_TAP_THRESHOLD = 10;
+  const DRAG_FACTOR = 0.4;
+
+  // Helper to set slide direction and navigate
+  function navigate(url, navType, photoId) {
+    // Check if we're in an iframe (overlay mode)
+    const isInOverlay = window.self !== window.top;
+
+    if (isInOverlay) {
+      // Send message to parent to handle navigation
+      if (navType === 'grid') {
+        window.parent.postMessage({ type: 'close' }, '*');
+      } else if (photoId) {
+        // Send navigate message with photo ID to parent
+        window.parent.postMessage({ type: 'navigate', photoId: photoId }, '*');
+      } else {
+        // Fallback: reload in iframe if no photo ID available
+        window.location.href = url;
+      }
+    } else {
+      // Normal navigation (not in overlay) - just navigate
+      window.location.href = url;
+    }
+  }
+
+  // Keyboard support
+  navZones.forEach(zone => {
+    zone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const url = zone.dataset.url;
+        const navType = zone.dataset.nav;
+        const photoId = zone.dataset.photoId;
+        if (url) {
+          navigate(url, navType, photoId);
+        }
+      }
+    });
+  });
+
+  // Desktop click handler (only for non-touch devices)
+  if (!isTouchDevice) {
+    navZones.forEach(zone => {
+      zone.addEventListener('click', (e) => {
+        const url = zone.dataset.url;
+        const navType = zone.dataset.nav;
+        const photoId = zone.dataset.photoId;
+        if (url) {
+          navigate(url, navType, photoId);
+        }
+      });
+    });
+  }
+
+  // Touch handlers (only on touch devices)
+  if (isTouchDevice) {
+    // Touch start
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchMoved = false;
+      touchHandled = false;
+    }, { passive: true });
+
+    // Touch move - visual feedback
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 1) return;
+
+      const deltaX = e.touches[0].clientX - touchStartX;
+      const deltaY = e.touches[0].clientY - touchStartY;
+      const absDeltaX = Math.abs(deltaX);
+      const absDeltaY = Math.abs(deltaY);
+
+      // Detect horizontal movement (lower threshold, more sensitive)
+      if (absDeltaX > 5 && absDeltaX > absDeltaY) {
+        touchMoved = true;
+        centerDiv.classList.add('swiping');
+        img.classList.add('swiping');
+
+        // Visual feedback
+        const offset = deltaX * DRAG_FACTOR;
+        centerDiv.style.transform = `translate(calc(-50% + ${offset}px), -50%)`;
+
+        const fadeAmount = Math.min(absDeltaX / 400, 0.3);
+        img.style.opacity = 1 - fadeAmount;
+      }
+    }, { passive: true });
+
+    // Touch end - handle navigation
+    document.addEventListener('touchend', (e) => {
+      if (e.changedTouches.length !== 1) return;
+
+      const deltaX = e.changedTouches[0].clientX - touchStartX;
+      const deltaY = e.changedTouches[0].clientY - touchStartY;
+      const absDeltaX = Math.abs(deltaX);
+      const absDeltaY = Math.abs(deltaY);
+
+      // Check if valid swipe (removed time check - any speed is fine)
+      if (touchMoved &&
+          absDeltaX >= MIN_SWIPE_DISTANCE &&
+          absDeltaX > absDeltaY) {
+
+        touchHandled = true;
+        // Navigate based on direction
+        if (deltaX > 0) {
+          // Swipe right - previous photo
+          const zone = document.querySelector('.nav-left');
+          const url = zone.dataset.url;
+          const photoId = zone.dataset.photoId;
+          if (url) navigate(url, 'prev', photoId);
+        } else {
+          // Swipe left - next photo
+          const zone = document.querySelector('.nav-right');
+          const url = zone.dataset.url;
+          const photoId = zone.dataset.photoId;
+          if (url) navigate(url, 'next', photoId);
+        }
+      }
+      // Check if it's a tap (minimal movement)
+      else if (!touchMoved || (absDeltaX < MIN_TAP_THRESHOLD && absDeltaY < MIN_TAP_THRESHOLD)) {
+        touchHandled = true;
+        // Determine which zone was tapped
+        const touch = e.changedTouches[0];
+        const element = document.elementFromPoint(touch.clientX, touch.clientY);
+        const zone = element.closest('.nav-zone');
+        if (zone) {
+          const url = zone.dataset.url;
+          const navType = zone.dataset.nav;
+          const photoId = zone.dataset.photoId;
+          if (url) {
+            navigate(url, navType, photoId);
+          }
+        }
+      }
+
+      // Reset visual state
+      resetVisuals();
+    }, { passive: true });
+
+    // Touch cancel
+    document.addEventListener('touchcancel', () => {
+      resetVisuals();
+    }, { passive: true });
+  }
+
+  function resetVisuals() {
+    centerDiv.classList.remove('swiping');
+    img.classList.remove('swiping');
+    centerDiv.style.transform = '';
+    img.style.opacity = '';
+  }
+})();
+</script>
+</body>
+</html>

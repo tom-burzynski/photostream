@@ -1,0 +1,660 @@
+<file>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<title>{{ title }}</title>
+<!-- LCP optimization: preload first images for faster above-the-fold loading -->
+{% if preload_images %}{% for img in preload_images %}<link rel="preload" as="image" href="{{ img.src }}" fetchpriority="high">
+{% endfor %}{% endif %}
+<style>
+  /* Adaptive flexbox gallery layout */
+  html, body { margin:0; background:#000; overflow-x:hidden; }
+
+  #gallery {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  #gallery li {
+    height: 40vh;
+    flex-grow: 1;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  #gallery li:last-child {
+    flex-grow: 10;
+  }
+
+  #gallery a {
+    display: block;
+    height: 100%;
+    outline: 2px solid #222;
+    transition: background-color 0.3s ease;
+  }
+
+  #gallery img {
+    max-height: 100%;
+    min-width: 100%;
+    object-fit: cover;
+    vertical-align: bottom;
+    display: block;
+    will-change: opacity, filter;
+  }
+
+  /* Fade-in animation for photos */
+  @media (prefers-reduced-motion: no-preference) {
+    #gallery img:not(.loaded) {
+      opacity: 0.0;
+      filter: blur(4px);
+      will-change: opacity, filter;
+      transition: opacity 2.0s ease-out, filter 2.0s ease-out;
+    }
+    #gallery img.loaded {
+      opacity: 1;
+      filter: none;
+      will-change: auto;
+    }
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    #gallery img:not(.loaded) {
+      opacity: 0;
+      transition: opacity 0.3s ease-out;
+      will-change: opacity;
+    }
+    #gallery img.loaded {
+      opacity: 1;
+      will-change: auto;
+    }
+  }
+
+  /* Portrait devices */
+  @media (max-aspect-ratio: 1/1) {
+    #gallery li {
+      height: 30vh;
+    }
+  }
+
+  /* Short screens */
+  @media (max-height: 480px) {
+    #gallery li {
+      height: 80vh;
+    }
+  }
+
+  /* Smaller screens in portrait - single column */
+  @media (max-aspect-ratio: 1/1) and (max-width: 480px) {
+    #gallery {
+      flex-direction: row;
+    }
+    #gallery li {
+      height: auto;
+      width: 100%;
+    }
+    #gallery img {
+      width: 100%;
+      max-height: 75vh;
+      min-width: 0;
+    }
+  }
+
+  /* Remove blue focus ring on tiles when jumping back via #hash */
+  #gallery a:focus,
+  #gallery a:focus-visible { outline:none; box-shadow:none; }
+  * { -webkit-tap-highlight-color: transparent; }
+
+  /* Site title and description - Fixed in upper left */
+  #site-title {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 1001;
+    color: #fff;
+    font-size: 1.125rem;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+    margin-bottom: 0.5rem;
+    text-align: left;
+  }
+
+  #site-description {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    margin-top: 0.25rem;
+    opacity: 0.9;
+  }
+
+  /* Site footer - Fixed at bottom-right */
+  #site-footer {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 1001;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 0, 0, 0.6);
+    text-align: right;
+    opacity: 0.9;
+  }
+
+  #site-footer a {
+    color: #fff;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+    pointer-events: auto;
+  }
+
+  #site-footer a:hover {
+    opacity: 0.7;
+  }
+
+  #site-footer .separator {
+    margin: 0 0.5rem;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  /* Month/Year Picker - Fixed in upper right */
+  #month-picker {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+  }
+
+  #month-select {
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    min-width: 10rem;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  #month-select:hover {
+    background: rgba(0, 0, 0, 0.95);
+    border-color: #666;
+  }
+
+  #month-select:focus {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
+
+  /* Year group headers in dropdown */
+  #month-select optgroup {
+    background: #000;
+    color: #888;
+    font-weight: bold;
+    font-style: normal;
+  }
+
+  #month-select option {
+    background: #000;
+    color: #fff;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Highlight current month in viewport */
+  #month-select option.current {
+    background: #333;
+    font-weight: bold;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 640px) {
+    #site-title {
+      top: 0.5rem;
+      left: 0.5rem;
+      font-size: 1rem;
+    }
+    #site-description {
+      font-size: 0.75rem;
+    }
+    #site-footer {
+      bottom: 0.5rem;
+      right: 0.5rem;
+      font-size: 0.75rem;
+    }
+    #month-picker {
+      top: 0.5rem;
+      right: 0.5rem;
+    }
+    #month-select {
+      font-size: 0.8125rem;
+      padding: 0.4rem 1.75rem 0.4rem 0.6rem;
+      min-width: 8rem;
+    }
+  }
+</style>
+<body>
+<div id="site-title">
+  {{ title }}
+  {% if description %}<div id="site-description">{{ description }}</div>{% endif %}
+</div>
+<div id="month-picker">
+  <select id="month-select" aria-label="Jump to month">
+    <option value="">Jump to month...</option>
+  </select>
+</div>
+{% if link1_title and link1_url or link2_title and link2_url or link3_title and link3_url or footer %}<div id="site-footer">{% if link1_title and link1_url %}<a href="{{ link1_url }}" target="_blank" rel="noopener noreferrer">{{ link1_title }}</a>{% endif %}{% if link1_title and link1_url and (link2_title and link2_url or link3_title and link3_url) %}<span class="separator">|</span>{% endif %}{% if link2_title and link2_url %}<a href="{{ link2_url }}" target="_blank" rel="noopener noreferrer">{{ link2_title }}</a>{% endif %}{% if link2_title and link2_url and link3_title and link3_url %}<span class="separator">|</span>{% endif %}{% if link3_title and link3_url %}<a href="{{ link3_url }}" target="_blank" rel="noopener noreferrer">{{ link3_title }}</a>{% endif %}{% if (link1_title and link1_url or link2_title and link2_url or link3_title and link3_url) and footer %}<span class="separator">|</span>{% endif %}{{ footer }}</div>{% endif %}
+<ul id="gallery">
+{% for photo in photos %}  <li>
+    <a href="{{ photo.page }}" id="{{ photo.id }}"{% if photo.bg_color %} style="background-color:{{ photo.bg_color }}"{% endif %}>
+      <img src="{{ photo.src }}" alt="{{ photo.name }}" loading="{% if loop.index0 < preload_count %}eager{% else %}lazy{% endif %}" decoding="async"{% if loop.index0 < preload_count %} fetchpriority="high"{% endif %}>
+    </a>
+  </li>
+{% endfor %}  <li></li>
+</ul>
+<script>
+const photos = {{ photos_json | safe }};   // [{src,w,h,name,id,page}] - needed for month picker
+const monthData = {{ month_data | safe }}; // [{year,month,label,photo_id}]
+let didInitialHashScroll = false;
+
+// Handle fade-in for all images (eager and lazy)
+document.addEventListener('DOMContentLoaded', () => {
+  const allImages = document.querySelectorAll('#gallery img');
+
+  allImages.forEach(img => {
+    const handleLoad = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          img.classList.add('loaded');
+        });
+      });
+    };
+
+    img.addEventListener('load', handleLoad, { once: true });
+
+    // Handle already-cached images
+    if (img.complete && img.naturalHeight !== 0) {
+      handleLoad();
+    }
+  });
+
+  // Handle initial scroll to hash or photo parameter
+  // Note: Skip if photo parameter exists as that will open overlay instead
+  if (!didInitialHashScroll) {
+    handleInitialHashScroll();
+    didInitialHashScroll = true;
+  }
+});
+
+/**
+ * Scroll to photo specified in URL hash (e.g., #ph-000123)
+ * Handles lazy-loaded images by waiting for them to load before scrolling.
+ * Cancels scroll if user manually scrolls during the process.
+ */
+function handleInitialHashScroll() {
+  const urlParams = new URLSearchParams(location.search);
+  const hasPhotoParam = urlParams.has('photo');
+  let targetId = null;
+
+  if (!hasPhotoParam && location.hash) {
+    targetId = location.hash.slice(1);
+  }
+
+  if (!targetId) return;
+
+  const el = document.getElementById(targetId);
+  if (!el) return;
+
+  const img = el.querySelector('img');
+  let userHasScrolled = false;
+
+  // Cancel auto-scroll if user manually scrolls
+  const cancelScroll = () => {
+    userHasScrolled = true;
+  };
+  window.addEventListener('scroll', cancelScroll, { once: true, passive: true });
+  window.addEventListener('wheel', cancelScroll, { once: true, passive: true });
+  window.addEventListener('touchmove', cancelScroll, { once: true, passive: true });
+
+  // Function to scroll once layout is stable
+  const scrollToTarget = () => {
+    if (userHasScrolled) return; // Don't interrupt user's scroll
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (userHasScrolled) return; // Check again before scrolling
+        el.scrollIntoView({ block: 'center' });
+        setTimeout(() => el.blur(), 0);
+      });
+    });
+  };
+
+  // If image is already loaded (cached or eager), scroll immediately
+  if (img && img.complete && img.naturalHeight !== 0) {
+    scrollToTarget();
+  } else if (img) {
+    // Force lazy images to start loading by changing loading attribute
+    if (img.loading === 'lazy') {
+      img.loading = 'eager';
+    }
+
+    // Wait for the image to load first
+    img.addEventListener('load', scrollToTarget, { once: true });
+    // Fallback timeout in case load event doesn't fire
+    setTimeout(scrollToTarget, 2000);
+  } else {
+    // No image found, scroll anyway
+    scrollToTarget();
+  }
+}
+
+
+// Month/Year picker functionality
+function initMonthPicker() {
+  const select = document.getElementById('month-select');
+  if (!select || !monthData || monthData.length === 0) return;
+
+  // Group months by year
+  const yearGroups = {};
+  monthData.forEach(item => {
+    if (!yearGroups[item.year]) {
+      yearGroups[item.year] = [];
+    }
+    yearGroups[item.year].push(item);
+  });
+
+  // Populate select with optgroups by year
+  Object.keys(yearGroups).sort((a, b) => b - a).forEach(year => {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = year;
+
+    yearGroups[year].forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.photo_id;
+      option.textContent = item.label;
+      option.dataset.year = item.year;
+      option.dataset.month = item.month;
+      optgroup.appendChild(option);
+    });
+
+    select.appendChild(optgroup);
+  });
+
+  // Handle selection - scroll to selected month's first photo
+  select.addEventListener('change', (e) => {
+    const photoId = e.target.value;
+    if (photoId) {
+      const element = document.getElementById(photoId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Selected value persists - updateCurrentMonthHighlight will keep it updated
+      }
+    }
+  });
+}
+
+// Cache photo index lookups for better performance
+let photoIndexMap = null;
+
+// Update current month display and highlighting based on viewport
+function updateCurrentMonthHighlight() {
+  const select = document.getElementById('month-select');
+  if (!select || !monthData || monthData.length === 0) return;
+
+  // Build index map once
+  if (!photoIndexMap) {
+    photoIndexMap = new Map(photos.map((p, i) => [p.id, i]));
+  }
+
+  // Find the first photo currently visible near the top of the viewport
+  const viewportTop = window.scrollY;
+  const viewportMiddle = viewportTop + (window.innerHeight / 3);
+
+  let currentPhotoId = null;
+  let minDistance = Infinity;
+
+  // Find the photo closest to the top third of viewport
+  for (let i = 0; i < photos.length; i++) {
+    const photoEl = document.getElementById(photos[i].id);
+    if (!photoEl) continue;
+
+    const rect = photoEl.getBoundingClientRect();
+    const elemTop = rect.top + window.scrollY;
+    const elemBottom = elemTop + rect.height;
+
+    if (elemBottom >= viewportTop && elemTop <= viewportTop + window.innerHeight) {
+      const distance = Math.abs(elemTop - viewportMiddle);
+      if (distance < minDistance) {
+        minDistance = distance;
+        currentPhotoId = photos[i].id;
+      }
+    }
+  }
+
+  if (!currentPhotoId) return;
+
+  const photoIndex = photoIndexMap.get(currentPhotoId);
+
+  // Find which month this photo belongs to
+  for (let i = 0; i < monthData.length; i++) {
+    const item = monthData[i];
+    const monthPhotoIndex = photoIndexMap.get(item.photo_id);
+
+    if (monthPhotoIndex <= photoIndex) {
+      const nextItem = monthData[i + 1];
+      if (!nextItem || photoIndexMap.get(nextItem.photo_id) > photoIndex) {
+        if (select.value !== item.photo_id) {
+          select.value = item.photo_id;
+        }
+        break;
+      }
+    }
+  }
+}
+
+// Debounced scroll handler for current month highlighting
+let scrollUpdateTimer = null;
+function scheduleMonthUpdate() {
+  if (scrollUpdateTimer !== null) return;
+  scrollUpdateTimer = setTimeout(() => {
+    scrollUpdateTimer = null;
+    updateCurrentMonthHighlight();
+  }, 200);
+}
+
+window.addEventListener('load', () => {
+  initMonthPicker();
+  updateCurrentMonthHighlight(); // Initialize with current month on load
+});
+// Monitor scroll for month picker updates
+window.addEventListener('scroll', () => {
+  scheduleMonthUpdate();
+}, { passive: true });
+
+// Photo overlay functionality - ensure overlay elements exist before running
+function initPhotoOverlay() {
+  const overlay = document.getElementById('photo-overlay');
+  const overlayFrame = document.getElementById('photo-frame');
+  const overlayClose = document.getElementById('overlay-close');
+
+  function scrollGridToPhoto(photoId) {
+    const photoEl = document.getElementById(photoId);
+    if (photoEl) {
+      // Scroll the grid to center the photo (happens behind overlay)
+      photoEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+
+  function openPhotoOverlay(photoUrl, photoId) {
+    overlayFrame.src = photoUrl;
+    overlay.classList.add('visible');
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+
+    // Scroll grid to current photo position (behind overlay)
+    scrollGridToPhoto(photoId);
+
+    // Update URL without page reload
+    const url = new URL(window.location);
+    url.searchParams.set('photo', photoId);
+    history.pushState({ photoId }, '', url);
+  }
+
+  function closePhotoOverlay() {
+    overlay.classList.remove('visible');
+    document.body.style.overflow = ''; // Re-enable scrolling
+    overlayFrame.src = ''; // Unload iframe
+
+    // Update URL to remove photo parameter
+    const url = new URL(window.location);
+    url.searchParams.delete('photo');
+    history.pushState({}, '', url);
+  }
+
+  // Handle photo link clicks - open in overlay instead of navigating
+  document.querySelectorAll('#gallery a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const photoId = link.id;
+      const photoUrl = link.href;
+      openPhotoOverlay(photoUrl, photoId);
+    });
+  });
+
+  // Close overlay on button click
+  overlayClose.addEventListener('click', closePhotoOverlay);
+
+  // Close overlay on ESC key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay.classList.contains('visible')) {
+      closePhotoOverlay();
+    }
+  });
+
+  // Handle browser back/forward buttons
+  window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.photoId) {
+      // Going to a photo
+      const photoEl = document.getElementById(e.state.photoId);
+      if (photoEl) {
+        openPhotoOverlay(photoEl.href, e.state.photoId);
+      }
+    } else {
+      // Going back to grid
+      closePhotoOverlay();
+    }
+  });
+
+  // Handle direct photo URL on page load
+  if (window.location.search.includes('photo=')) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const photoId = urlParams.get('photo');
+    const photoEl = document.getElementById(photoId);
+    if (photoEl) {
+      openPhotoOverlay(photoEl.href, photoId);
+    }
+  }
+
+  // Listen for messages from photo page iframe (for navigation)
+  window.addEventListener('message', (e) => {
+    if (e.data.type === 'navigate') {
+      const photoEl = document.getElementById(e.data.photoId);
+      if (photoEl) {
+        openPhotoOverlay(photoEl.href, e.data.photoId);
+      }
+    } else if (e.data.type === 'close') {
+      closePhotoOverlay();
+    }
+  });
+}
+
+// Run initialization when DOM is ready or immediately if already loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPhotoOverlay);
+} else {
+  initPhotoOverlay();
+}
+</script>
+
+<!-- Photo overlay -->
+<div id="photo-overlay">
+  <button id="overlay-close" aria-label="Close photo">&times;</button>
+  <iframe id="photo-frame" title="Photo viewer"></iframe>
+</div>
+
+<style>
+#photo-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+#photo-overlay.visible {
+  display: block;
+  opacity: 1;
+}
+
+#photo-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+#overlay-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  color: white;
+  font-size: 36px;
+  font-weight: 300;
+  line-height: 50px;
+  cursor: pointer;
+  z-index: 10001;
+  transition: background 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: Arial, sans-serif;
+}
+
+#overlay-close:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.1);
+}
+
+#overlay-close:active {
+  transform: scale(0.95);
+}
+</style>
+
+</body>
+</html>
+</file>

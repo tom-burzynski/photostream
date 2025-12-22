@@ -1,0 +1,65 @@
+# Build output
+originals/
+site/
+.venv
+dist/
+build/
+*.egg-info/
+
+# Python artifacts
+*.py[cod]
+*$py.class
+*.pyo
+__pycache__/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Test output
+.vscode-test/
+coverage/
+
+# Logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables and config
+.env
+.env.local
+.env.*.local
+config_variables.sh
+config_variables.bat
+
+# Temporary files
+tmp/
+temp/
+
+# Cache files
+.metadata_cache.pkl
+*.pkl
+
+# AI assistant instructions
+CLAUDE.md
+AGENTS.md
+
+# Documentation (keep local only)
+docs/
+
