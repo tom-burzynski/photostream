@@ -211,13 +211,20 @@
 // Progressive image loading: start with preview, upgrade to full-size
 (function() {
   const img = document.querySelector('.center img');
-  if (!img) return;
+  if (!img) {
+    console.log('[Progressive Loading] No image element found');
+    return;
+  }
 
   const fullSrc = img.dataset.fullSrc;
   const previewSrc = img.src;
 
+  console.log('[Progressive Loading] Preview src:', previewSrc);
+  console.log('[Progressive Loading] Full src:', fullSrc);
+
   // If we're already showing the full-size image, skip progressive loading
   if (!fullSrc || img.src === fullSrc) {
+    console.log('[Progressive Loading] Skipping - already showing full-size or no full src');
     // Fallback fade-in for browsers without View Transitions
     if (!document.startViewTransition) {
       const handleLoad = () => {
@@ -237,9 +244,10 @@
   }
 
   // Progressive loading: preview → full-size
-  // Simple approach: just swap src and let CSS handle it
+  console.log('[Progressive Loading] Starting to load full-size image...');
   const fullImg = new Image();
   fullImg.onload = () => {
+    console.log('[Progressive Loading] Full-size image loaded, swapping...');
     // Remove the data attribute and inline dimension styles before swapping
     img.removeAttribute('data-full-src');
     img.style.width = '';
@@ -247,6 +255,11 @@
 
     // Swap to full-size image
     img.src = fullSrc;
+    console.log('[Progressive Loading] Swap complete - now showing:', img.src);
+  };
+
+  fullImg.onerror = (e) => {
+    console.error('[Progressive Loading] Failed to load full-size image:', fullSrc, e);
   };
 
   // Start loading full-size image
