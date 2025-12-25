@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   photostream:
     build: .
     container_name: photostream-watcher
     restart: unless-stopped
 
+    # Port mappings
+    ports:
+      - "8080:8080"                            # Web server for live preview
+
     # Volume mappings
     volumes:
-      - ./originals:/app/originals:ro          # Source photos (read-only)
+      - ./originals:/app/originals             # Source photos
       - ./site:/app/site                       # Generated site output
       # Example: Mount to web server directory
       # - /var/www/html/gallery:/app/site       # Direct deployment to web server
@@ -17,31 +19,31 @@ services:
     # Environment variables for configuration
     environment:
       # Gallery build settings
-      - ROW_HEIGHT=300                         # Target row height in pixels
-      - PREVIEW_HEIGHT=400                     # Max preview image height
-      - PRELOAD_COUNT=20                       # Number of images to preload for LCP
-      - WORKERS=4                              # Number of worker threads
+      - PREVIEW_HEIGHT=${PREVIEW_HEIGHT}       # Max preview image height
+      - PRELOAD_COUNT=${PRELOAD_COUNT}         # Number of images to preload for LCP
+      - WORKERS=${WORKERS}                     # Number of worker threads
 
       # Image processing
-      - RENAME=false                           # Auto-rename images to EXIF datetime format
-      - GEOCODE=false                          # Enable GPS geocoding lookups
-      - REGEOCODE=true                         # Retry geocoding for photos without location data
+      - RENAME=${RENAME}                       # Auto-rename images to EXIF datetime format
+      - GEOCODE=${GEOCODE}                     # Enable GPS geocoding lookups
+      - REGEOCODE=${REGEOCODE}                 # Retry geocoding for photos without location data
 
       # Site customization
-      - TITLE=[photostream]                    # Gallery title
-      - DESCRIPTION=                           # Gallery description
-      - FOOTER=                                # Footer text
-      - LINK1_TITLE=                           # First footer link title
-      - LINK1_URL=                             # First footer link URL
-      - LINK2_TITLE=                           # Second footer link title
-      - LINK2_URL=                             # Second footer link URL
-      - LINK3_TITLE=                           # Third footer link title
-      - LINK3_URL=                             # Third footer link URL
+      - TITLE=${TITLE}                         # Gallery title
+      - DESCRIPTION=${DESCRIPTION}             # Gallery description
+      - FOOTER=${FOOTER}                       # Footer text
+      - LINK1_TITLE=${LINK1_TITLE}             # First footer link title
+      - LINK1_URL=${LINK1_URL}                 # First footer link URL
+      - LINK2_TITLE=${LINK2_TITLE}             # Second footer link title
+      - LINK2_URL=${LINK2_URL}                 # Second footer link URL
+      - LINK3_TITLE=${LINK3_TITLE}             # Third footer link title
+      - LINK3_URL=${LINK3_URL}                 # Third footer link URL
 
       # Watcher settings
-      - WATCH_DELAY=5                          # Seconds to wait after file change
-      - RUN_ON_STARTUP=true                    # Build gallery on container start
-      - LOG_LEVEL=INFO                         # Logging level
+      - WATCH_DELAY=${WATCH_DELAY}             # Seconds to wait after file change
+      - RUN_ON_STARTUP=${RUN_ON_STARTUP}       # Build gallery on container start
+      - LOG_LEVEL=${LOG_LEVEL}                 # Logging level
+      - WEB_SERVER_PORT=${WEB_SERVER_PORT:-8080}  # Port for live preview web server
 
     # Health check
     healthcheck:
@@ -50,17 +52,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-# Example production override
-# Create docker-compose.prod.yml with your specific settings:
-#
-# version: '3.8'
-# services:
-#   photostream:
-#     volumes:
-#       - ./originals:/app/originals:ro
-#       - /var/www/html/gallery:/app/site       # Deploy directly to web server
-#     environment:
-#       - ROW_HEIGHT=250
-#       - PREVIEW_HEIGHT=350
-#       - WORKERS=8

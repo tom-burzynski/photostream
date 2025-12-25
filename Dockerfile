@@ -26,7 +26,6 @@ RUN chmod +x docker-watcher.sh
 RUN mkdir -p /app/originals /app/site
 
 # Environment variables with defaults
-ENV ROW_HEIGHT=300
 ENV PREVIEW_HEIGHT=400
 ENV PRELOAD_COUNT=20
 ENV WORKERS=4
@@ -34,7 +33,7 @@ ENV WATCH_DELAY=5
 ENV RUN_ON_STARTUP=true
 ENV LOG_LEVEL=INFO
 ENV RENAME=false
-ENV TITLE="[photostream]"
+ENV TITLE="Photostream"
 ENV DESCRIPTION=""
 ENV FOOTER=""
 ENV LINK1_TITLE=""
@@ -44,6 +43,10 @@ ENV LINK2_URL=""
 ENV LINK3_TITLE=""
 ENV LINK3_URL=""
 ENV GEOCODE=false
+ENV WEB_SERVER_PORT=8080
+
+# Expose web server port
+EXPOSE 8080
 
 # Use the watcher script as entrypoint
 ENTRYPOINT ["./docker-watcher.sh"]
