@@ -303,11 +303,12 @@ git push origin main
 git push origin v1.0.0
 ```
 
-Once pushed, GitHub Actions will automatically:
-- Run tests
-- Build multi-platform Docker images (amd64, arm64)
+Once the version tag is pushed, GitHub Actions will automatically:
+- Build multi-platform Docker images (amd64, arm64) - **triggered by version tags only**
 - Publish to GitHub Container Registry
 - Create a GitHub release with changelog
+
+**Note:** Docker images are ONLY built when you push a version tag (e.g., `v1.0.0`). Regular commits to main will not trigger image builds. Tests run automatically on all commits to main and pull requests.
 
 View build progress in the **Actions** tab of your GitHub repository.
 

@@ -9,22 +9,18 @@ This directory contains CI/CD workflows for the Photostream project.
 Automatically builds and publishes Docker images to GitHub Container Registry.
 
 **Triggers:**
-- Push to `main` branch
-- New version tags (`v*`)
-- Pull requests (build-only, no push)
-- Manual workflow dispatch
+- New version tags (`v*`) - **Only way to trigger automatic builds**
+- Manual workflow dispatch (via Actions tab)
 
 **Platforms:**
 - `linux/amd64` (Intel/AMD 64-bit)
 - `linux/arm64` (ARM 64-bit, including Apple Silicon)
 
 **Image Tags:**
-- `latest` - Latest commit on main branch
+- `latest` - Latest versioned release
 - `v1.2.3` - Semantic version tags
 - `v1.2` - Major.minor version
 - `v1` - Major version only
-- `main-abc1234` - Branch with commit SHA
-- `pr-123` - Pull request number
 
 **Registry:** `ghcr.io/[owner]/photostream`
 
