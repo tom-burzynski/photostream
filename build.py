@@ -91,12 +91,13 @@ class MetadataCache:
                 pass
     
     def _get_cache_key(self, image_path: Path) -> str:
-        """Generate cache key based on path and modification time."""
+        """Generate cache key based on filename, size, and modification time (path-independent)."""
         try:
             stat = image_path.stat()
-            return f"{image_path}:{stat.st_size}:{stat.st_mtime}"
+            # Use only filename (not full path) to make cache portable between environments
+            return f"{image_path.name}:{stat.st_size}:{stat.st_mtime}"
         except Exception:
-            return str(image_path)
+            return str(image_path.name)
     
     def get_datetime(self, image_path: Path) -> Optional[dt.datetime]:
         """Get cached datetime or None if not cached/invalid."""
