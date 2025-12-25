@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Save to file for multiline handling
+          echo "$CHANGELOG" > /tmp/changelog.txt
+
+          # Set output
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: /tmp/changelog.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add Docker pull instructions to release
+        uses: softprops/action-gh-release@v1
+        with:
+          append_body: true
+          body: |
+
+            ## Docker Images
+
+            Multi-platform images are available on GitHub Container Registry:
+
+            ```bash
+            # Pull the image
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:latest
+
+            # Run the container
+            docker run -d \
+              -p 8080:8080 \
+              -v ./originals:/app/originals \
+              -v ./site:/app/site \
+              -e GEOCODE=true \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+
+            **Supported platforms:**
+            - `linux/amd64` (Intel/AMD 64-bit)
+            - `linux/arm64` (ARM 64-bit, Apple Silicon)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
