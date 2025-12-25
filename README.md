@@ -3,7 +3,9 @@ This is a lightweight static photo gallery generator that builds an image grid w
 
 The functionality and layout are based on [photo-stream](https://github.com/waschinski/photo-stream).
 
-The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/pen/eYOPdMG), the original creator of [photo-stream](https://github.com/waschinski/photo-stream). 
+The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/pen/eYOPdMG), the original creator of [photo-stream](https://github.com/waschinski/photo-stream).
+
+![Photostream Screenshot](.github/screenshots/photostream-screenshot-1.png)
 
 ## What it does
 - Scans a folder (recursively) for images and builds a static site that presents photos in a justified grid.
