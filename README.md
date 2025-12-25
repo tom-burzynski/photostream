@@ -82,13 +82,32 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 
 ### Docker Deployment (Recommended)
 
-1. **Quick start with automatic file watching:**
+**Option 1: Use pre-built image from GitHub Container Registry**
+```bash
+# Pull the latest image
+docker pull ghcr.io/tom-burzynski/photostream:latest
+
+# Run with your photos
+docker run -d \
+  -p 8080:8080 \
+  -v ./originals:/app/originals \
+  -v ./site:/app/site \
+  -e GEOCODE=true \
+  -e RENAME=true \
+  ghcr.io/tom-burzynski/photostream:latest
+
+# View gallery at http://localhost:8080
+```
+
+**Option 2: Build locally with Docker Compose**
 ```bash
 # Place your photos in ./originals directory
 docker-compose up -d
 
 # View logs
 docker-compose logs -f photostream
+
+# Access gallery at http://localhost:8080
 ```
 
 2. **Custom deployment location:**
