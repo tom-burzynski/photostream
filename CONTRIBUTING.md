@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in NVBar!
+Thank you for your interest in Photostream!
 
 **This is a personal project and I am not accepting contributions at this time.**
 

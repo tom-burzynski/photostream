@@ -85,8 +85,5 @@ For installation and deployment instructions, see [INSTALLATION.md](INSTALLATION
 - Requires a writable output directory; without permissions, the build may fail.
 - If a non-image file is present in the source tree, it will be ignored.
 
-## Contributing
-- Feature branches are welcome. Please keep changes focused and include tests or at least a sanity check.
-
 ## License
 - This project is provided as-is. No warranty.
