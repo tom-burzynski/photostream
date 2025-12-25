@@ -645,7 +645,7 @@ class PreviewGenerator:
             needs = (not dst.exists()) or (dst.stat().st_mtime < src.stat().st_mtime)
         except Exception:
             needs = True
-        
+
         if needs:
             try:
                 with Image.open(src) as im:
@@ -657,8 +657,14 @@ class PreviewGenerator:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     im.save(dst, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD)
                 return True
-            except Exception:
-                # If conversion fails, do not leak the original with metadata
+            except Exception as e:
+                # If conversion fails, remove any partial/empty file and do not leak the original with metadata
+                if dst.exists():
+                    try:
+                        dst.unlink()
+                    except Exception:
+                        pass
+                print(f"Warning: Failed to convert {src.name} to WebP: {e}", file=sys.stderr)
                 return False
         return True
 
@@ -857,14 +863,17 @@ class PhotoProcessor:
     
     @staticmethod
     def _progress(i: int, n: int, label: str = "") -> None:
-        """Display a progress bar."""
+        """Display a progress bar - only output every 10 items for clean Docker logs."""
         if n <= 0:
             return
-        width = 30
-        filled = int(width * (i / n))
-        bar = "#" * filled + "-" * (width - filled)
-        end = "\n" if i >= n else ""
-        print(f"\r{label} [{bar}] {i}/{n}", end=end, flush=True)
+
+        # Only output progress every 10 items or at completion
+        # This prevents log spam in Docker while still showing progress
+        if i >= n or i % 10 == 0:
+            width = 30
+            filled = int(width * (i / n))
+            bar = "#" * filled + "-" * (width - filled)
+            print(f"{label} [{bar}] {i}/{n}", flush=True)
     
     @staticmethod
     def _format_photo_title(photo_datetime: dt.datetime) -> str:
