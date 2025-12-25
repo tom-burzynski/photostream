@@ -12,8 +12,8 @@ log() {
 build_gallery() {
     log "Starting gallery build..."
 
-    # Build command with environment variables
-    CMD="python3 build.py /app/originals \
+    # Build command with environment variables (-u for unbuffered output)
+    CMD="python3 -u build.py /app/originals \
         --out-dir /app/site \
         --preview-height ${PREVIEW_HEIGHT} \
         --preload-count ${PRELOAD_COUNT} \
