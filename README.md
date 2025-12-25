@@ -277,5 +277,39 @@ volumes:
 ## Contributing
 - Feature branches are welcome. Please keep changes focused and include tests or at least a sanity check.
 
+## Creating Releases
+
+To create a new release and trigger automated Docker builds:
+
+**Option 1: Use the release script (recommended)**
+```bash
+./build-release.sh
+```
+
+The script will:
+1. Check for uncommitted changes
+2. Prompt for version number (e.g., `1.0.0`)
+3. Prompt for release message
+4. Create and push the version tag
+5. Trigger GitHub Actions to build and publish Docker images
+
+**Option 2: Manual process**
+```bash
+# Tag the release
+git tag -a v1.0.0 -m "Release version 1.0.0"
+
+# Push commits and tags
+git push origin main
+git push origin v1.0.0
+```
+
+Once pushed, GitHub Actions will automatically:
+- Run tests
+- Build multi-platform Docker images (amd64, arm64)
+- Publish to GitHub Container Registry
+- Create a GitHub release with changelog
+
+View build progress in the **Actions** tab of your GitHub repository.
+
 ## License
 - This project is provided as-is. No warranty.
