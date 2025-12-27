@@ -1,0 +1,22 @@
+# Cloudflare Workers configuration for Photostream
+# Documentation: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "photostream"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Account details - get these from your Cloudflare dashboard
+# account_id = "your-account-id-here"
+
+# Routes - configure which domains/paths this worker handles
+# Uncomment and modify for your domain:
+# routes = [
+#   { pattern = "photos.example.com/*", zone_name = "example.com" }
+# ]
+
+# Or use workers.dev subdomain for testing:
+# workers_dev = true
+
+# Environment variables (optional)
+# [vars]
+# B2_BUCKET_ENDPOINT = "your-bucket.s3.us-west-004.backblazeb2.com"

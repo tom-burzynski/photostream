@@ -48,6 +48,12 @@ Thumbs.db
 config_variables.sh
 config_variables.bat
 
+# Cloudflare deployment (keep examples, ignore actual configs)
+cloudflare/worker.js
+cloudflare/wrangler.toml
+cloudflare/.wrangler/
+cloudflare/node_modules/
+
 # Temporary files
 tmp/
 temp/
