@@ -84,13 +84,28 @@ fi
 echo ""
 print_info "Tag to create: $TAG"
 
-# Prompt for release message
+# Prompt for release notes
 echo ""
-echo -e "${BLUE}Enter release message (optional, press Enter to skip):${NC}"
-read -r RELEASE_MESSAGE
+echo -e "${BLUE}Enter release notes (multi-line supported):${NC}"
+echo -e "${YELLOW}Press Ctrl+D when finished, or Ctrl+C to use default message${NC}"
+echo ""
 
-if [ -z "$RELEASE_MESSAGE" ]; then
+# Capture multi-line input
+RELEASE_MESSAGE=""
+if RELEASE_MESSAGE=$(cat); then
+    # Remove leading/trailing whitespace
+    RELEASE_MESSAGE=$(echo "$RELEASE_MESSAGE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+    # If empty or only whitespace, use default
+    if [ -z "$RELEASE_MESSAGE" ]; then
+        RELEASE_MESSAGE="Release $VERSION"
+        print_info "Using default message"
+    fi
+else
+    # Ctrl+C was pressed or input failed
+    echo ""
     RELEASE_MESSAGE="Release $VERSION"
+    print_info "Using default message"
 fi
 
 echo ""
@@ -101,7 +116,11 @@ echo ""
 echo "Version:  $VERSION"
 echo "Tag:      $TAG"
 echo "Branch:   $CURRENT_BRANCH"
-echo "Message:  $RELEASE_MESSAGE"
+echo ""
+echo "Release Notes:"
+echo "────────────────────────────────────────────────────────────"
+echo "$RELEASE_MESSAGE"
+echo "────────────────────────────────────────────────────────────"
 echo ""
 
 # Confirm release
