@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import configparser
 import datetime as dt
 import json
 import re
@@ -1190,47 +1191,233 @@ class PhotoProcessor:
 
 
 
+def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
+    """Load configuration from INI file if it exists."""
+    config_defaults = {
+        "folder": "./originals",
+        "out_dir": "./site",
+        "workers": os.cpu_count() or 4,
+        "template_dir": None,
+        "preview_height": DEFAULT_PREVIEW_HEIGHT,
+        "preload_count": 20,
+        "rename": False,
+        "title": "[photostream]",
+        "description": "",
+        "footer": "",
+        "link1_title": "",
+        "link1_url": "",
+        "link2_title": "",
+        "link2_url": "",
+        "link3_title": "",
+        "link3_url": "",
+        "geocode": False,
+        "regeocode": False,
+        "deployment_method": "",
+        "rsync_destination": "",
+        "rclone_destination": "",
+        "robocopy_destination": "",
+    }
+
+    if not config_path.exists():
+        return config_defaults
+
+    try:
+        config = configparser.ConfigParser()
+        config.read(config_path)
+
+        # Parse build settings
+        if "build" in config:
+            build_section = config["build"]
+            if "folder" in build_section:
+                config_defaults["folder"] = build_section["folder"]
+            if "out_dir" in build_section:
+                config_defaults["out_dir"] = build_section["out_dir"]
+            if "workers" in build_section:
+                config_defaults["workers"] = build_section.getint("workers")
+            if "template_dir" in build_section and build_section["template_dir"]:
+                config_defaults["template_dir"] = build_section["template_dir"]
+            if "preview_height" in build_section:
+                config_defaults["preview_height"] = build_section.getint("preview_height")
+            if "preload_count" in build_section:
+                config_defaults["preload_count"] = build_section.getint("preload_count")
+            if "rename" in build_section:
+                config_defaults["rename"] = build_section.getboolean("rename")
+            if "geocode" in build_section:
+                config_defaults["geocode"] = build_section.getboolean("geocode")
+            if "regeocode" in build_section:
+                config_defaults["regeocode"] = build_section.getboolean("regeocode")
+
+        # Parse gallery settings
+        if "gallery" in config:
+            gallery_section = config["gallery"]
+            if "title" in gallery_section:
+                config_defaults["title"] = gallery_section["title"]
+            if "description" in gallery_section:
+                config_defaults["description"] = gallery_section["description"]
+            if "footer" in gallery_section:
+                config_defaults["footer"] = gallery_section["footer"]
+            if "link1_title" in gallery_section:
+                config_defaults["link1_title"] = gallery_section["link1_title"]
+            if "link1_url" in gallery_section:
+                config_defaults["link1_url"] = gallery_section["link1_url"]
+            if "link2_title" in gallery_section:
+                config_defaults["link2_title"] = gallery_section["link2_title"]
+            if "link2_url" in gallery_section:
+                config_defaults["link2_url"] = gallery_section["link2_url"]
+            if "link3_title" in gallery_section:
+                config_defaults["link3_title"] = gallery_section["link3_title"]
+            if "link3_url" in gallery_section:
+                config_defaults["link3_url"] = gallery_section["link3_url"]
+
+        # Parse deployment settings
+        if "deployment" in config:
+            deployment_section = config["deployment"]
+            if "method" in deployment_section:
+                config_defaults["deployment_method"] = deployment_section["method"]
+            if "rsync_destination" in deployment_section:
+                config_defaults["rsync_destination"] = deployment_section["rsync_destination"]
+            if "rclone_destination" in deployment_section:
+                config_defaults["rclone_destination"] = deployment_section["rclone_destination"]
+            if "robocopy_destination" in deployment_section:
+                config_defaults["robocopy_destination"] = deployment_section["robocopy_destination"]
+
+        return config_defaults
+    except Exception as e:
+        print(f"Warning: Error reading config file {config_path}: {e}", file=sys.stderr)
+        return config_defaults
+
+
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments with config file support."""
+    # Load config file defaults first
+    config_defaults = load_config_file()
+
     ap = argparse.ArgumentParser(
         description="Generate a justified photo gallery with per-photo pages (newest first)."
     )
-    ap.add_argument("folder", type=Path, help="Folder containing photos (scanned recursively).")
-    ap.add_argument("--out-dir", type=Path, default=None,
+    ap.add_argument("folder", nargs="?", type=Path, default=config_defaults["folder"],
+                    help="Folder containing photos (scanned recursively).")
+    ap.add_argument("--config", type=Path, default=Path("config.ini"),
+                    help="Path to configuration file (default: config.ini).")
+    ap.add_argument("--out-dir", type=Path, default=config_defaults["out_dir"],
                     help="Directory to write index.html, previews/, and view/. Defaults to current working directory.")
-    ap.add_argument("--workers", type=int, default=os.cpu_count() or 4,
+    ap.add_argument("--workers", type=int, default=config_defaults["workers"],
                     help="Number of worker threads to use for image processing (default: number of CPU cores).")
-    ap.add_argument("--template-dir", type=Path, default=None,
+    ap.add_argument("--template-dir", type=Path, default=config_defaults["template_dir"],
                     help="Directory containing custom templates (index.html, photo.html). Defaults to ./templates/")
-    ap.add_argument("--preview-height", type=int, default=DEFAULT_PREVIEW_HEIGHT,
-                    help=f"Maximum height for preview images in pixels (default: {DEFAULT_PREVIEW_HEIGHT}). Lower values reduce file sizes and improve loading speed.")
-    ap.add_argument("--preload-count", type=int, default=20,
-                    help="Number of first images to preload for LCP optimization (default: 20). Higher values may slow initial page load.")
-    ap.add_argument("--rename", action="store_true",
+    ap.add_argument("--preview-height", type=int, default=config_defaults["preview_height"],
+                    help=f"Maximum height for preview images in pixels (default: {config_defaults['preview_height']}). Lower values reduce file sizes and improve loading speed.")
+    ap.add_argument("--preload-count", type=int, default=config_defaults["preload_count"],
+                    help=f"Number of first images to preload for LCP optimization (default: {config_defaults['preload_count']}). Higher values may slow initial page load.")
+    ap.add_argument("--rename", action="store_true", default=config_defaults["rename"],
                     help="Rename image files based on EXIF datetime (format: YYYY-MM-DD-HH-MM-SS.ext) before processing.")
-    ap.add_argument("--title", type=str, default="[photostream]",
-                    help="Title for the gallery site (default: '[photostream]').")
-    ap.add_argument("--description", type=str, default="",
+    ap.add_argument("--title", type=str, default=config_defaults["title"],
+                    help=f"Title for the gallery site (default: '{config_defaults['title']}').")
+    ap.add_argument("--description", type=str, default=config_defaults["description"],
                     help="Description text to display under the title (default: empty).")
-    ap.add_argument("--footer", type=str, default="",
+    ap.add_argument("--footer", type=str, default=config_defaults["footer"],
                     help="Footer text to display at bottom-right of the page (default: empty).")
-    ap.add_argument("--link1-title", type=str, default="",
+    ap.add_argument("--link1-title", type=str, default=config_defaults["link1_title"],
                     help="Title for first footer link (default: empty).")
-    ap.add_argument("--link1-url", type=str, default="",
+    ap.add_argument("--link1-url", type=str, default=config_defaults["link1_url"],
                     help="URL for first footer link (default: empty).")
-    ap.add_argument("--link2-title", type=str, default="",
+    ap.add_argument("--link2-title", type=str, default=config_defaults["link2_title"],
                     help="Title for second footer link (default: empty).")
-    ap.add_argument("--link2-url", type=str, default="",
+    ap.add_argument("--link2-url", type=str, default=config_defaults["link2_url"],
                     help="URL for second footer link (default: empty).")
-    ap.add_argument("--link3-title", type=str, default="",
+    ap.add_argument("--link3-title", type=str, default=config_defaults["link3_title"],
                     help="Title for third footer link (default: empty).")
-    ap.add_argument("--link3-url", type=str, default="",
+    ap.add_argument("--link3-url", type=str, default=config_defaults["link3_url"],
                     help="URL for third footer link (default: empty).")
-    ap.add_argument("--geocode", action="store_true",
+    ap.add_argument("--geocode", action="store_true", default=config_defaults["geocode"],
                     help="Enable reverse geocoding to extract city names from GPS coordinates (requires internet connection).")
-    ap.add_argument("--regeocode", action="store_true",
+    ap.add_argument("--regeocode", action="store_true", default=config_defaults["regeocode"],
                     help="Force re-geocoding of all images, ignoring cached location data. Requires --geocode flag.")
-    return ap.parse_args()
+    ap.add_argument("--deploy", action="store_true",
+                    help="Deploy the gallery after building (requires deployment configuration in config.ini).")
+    ap.add_argument("--deploy-method", type=str, default=config_defaults["deployment_method"],
+                    help="Deployment method: rsync, rclone, or robocopy (overrides config.ini).")
+
+    args = ap.parse_args()
+
+    # Re-load config file if custom config path was specified
+    if args.config != Path("config.ini"):
+        config_defaults = load_config_file(args.config)
+        # Update args with config file values where command line didn't override
+        for key, value in config_defaults.items():
+            arg_key = key.replace("_", "-") if "-" in key else key
+            if not hasattr(args, key):
+                setattr(args, key, value)
+
+    return args
+
+
+def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any]) -> None:
+    """Deploy the gallery to a remote destination using the specified method."""
+    if not method:
+        print("No deployment method specified. Skipping deployment.", flush=True)
+        return
+
+    print(f"\nDeploying gallery using {method}...", flush=True)
+
+    if method == "rsync":
+        destination = config_defaults.get("rsync_destination", "")
+        if not destination:
+            print("Error: rsync method specified but rsync_destination not configured", file=sys.stderr)
+            return
+
+        cmd = ["rsync", "-avu", "--delete", f"{output_dir}/", destination]
+        try:
+            import subprocess
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            print(result.stdout, flush=True)
+            print(f"Successfully deployed to {destination} via rsync", flush=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error deploying via rsync: {e}", file=sys.stderr)
+            print(e.stderr, file=sys.stderr)
+        except FileNotFoundError:
+            print("Error: rsync command not found. Please install rsync.", file=sys.stderr)
+
+    elif method == "rclone":
+        destination = config_defaults.get("rclone_destination", "")
+        if not destination:
+            print("Error: rclone method specified but rclone_destination not configured", file=sys.stderr)
+            return
+
+        cmd = ["rclone", "sync", "--verbose", str(output_dir), destination]
+        try:
+            import subprocess
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            print(result.stdout, flush=True)
+            print(f"Successfully deployed to {destination} via rclone", flush=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error deploying via rclone: {e}", file=sys.stderr)
+            print(e.stderr, file=sys.stderr)
+        except FileNotFoundError:
+            print("Error: rclone command not found. Please install rclone.", file=sys.stderr)
+
+    elif method == "robocopy":
+        destination = config_defaults.get("robocopy_destination", "")
+        if not destination:
+            print("Error: robocopy method specified but robocopy_destination not configured", file=sys.stderr)
+            return
+
+        cmd = ["robocopy", str(output_dir), destination, "/MIR", "/R:3", "/W:5", "/MT:8"]
+        try:
+            import subprocess
+            # Robocopy returns exit code 1 for success with files copied
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            print(result.stdout, flush=True)
+            if result.returncode <= 7:  # Robocopy exit codes 0-7 are success/warnings
+                print(f"Successfully deployed to {destination} via robocopy", flush=True)
+            else:
+                print(f"Error deploying via robocopy (exit code {result.returncode})", file=sys.stderr)
+                print(result.stderr, file=sys.stderr)
+        except FileNotFoundError:
+            print("Error: robocopy command not found (Windows only).", file=sys.stderr)
+
+    else:
+        print(f"Error: Unknown deployment method: {method}", file=sys.stderr)
 
 
 def main():
@@ -1270,6 +1457,16 @@ def main():
         )
         processor = PhotoProcessor(config, args.template_dir)
         processor.build_gallery()
+
+        # Deploy if requested
+        if args.deploy or args.deploy_method:
+            config_defaults = load_config_file(args.config)
+            deploy_method = args.deploy_method or config_defaults.get("deployment_method", "")
+            if deploy_method:
+                deploy_gallery(config.out_dir, deploy_method, config_defaults)
+            else:
+                print("Warning: --deploy specified but no deployment method configured", file=sys.stderr)
+
     except ValueError as e:
         print(f"Configuration error: {e}", file=sys.stderr)
         sys.exit(1)

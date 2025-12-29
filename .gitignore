@@ -47,6 +47,8 @@ Thumbs.db
 .env.*.local
 config_variables.sh
 config_variables.bat
+config_variables_template.bat
+config.ini
 
 # Cloudflare deployment (keep examples, ignore actual configs)
 cloudflare/
