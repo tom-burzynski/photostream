@@ -868,13 +868,13 @@ class PhotoProcessor:
         if n <= 0:
             return
 
-        # Only output progress every 10 items or at completion
-        # This prevents log spam in Docker while still showing progress
-        if i >= n or i % 10 == 0:
-            width = 30
-            filled = int(width * (i / n))
-            bar = "#" * filled + "-" * (width - filled)
-            print(f"{label} [{bar}] {i}/{n}", flush=True)
+        # Output progress bar on single line with carriage return
+        width = 30
+        filled = int(width * (i / n))
+        bar = "#" * filled + "-" * (width - filled)
+        # Use \r to update same line, add newline only when complete
+        end_char = '\n' if i >= n else ''
+        print(f"\r{label} [{bar}] {i}/{n}", end=end_char, flush=True)
     
     @staticmethod
     def _format_photo_title(photo_datetime: dt.datetime) -> str:
