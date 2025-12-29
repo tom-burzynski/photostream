@@ -47,33 +47,3 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Add Docker pull instructions to release
-        uses: softprops/action-gh-release@v1
-        with:
-          append_body: true
-          body: |
-
-            ## Docker Images
-
-            Multi-platform images are available on GitHub Container Registry:
-
-            ```bash
-            # Pull the image
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            docker pull ghcr.io/${{ github.repository }}:latest
-
-            # Run the container
-            docker run -d \
-              -p 8080:8080 \
-              -v ./originals:/app/originals \
-              -v ./site:/app/site \
-              -e GEOCODE=true \
-              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
-
-            **Supported platforms:**
-            - `linux/amd64` (Intel/AMD 64-bit)
-            - `linux/arm64` (ARM 64-bit, Apple Silicon)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

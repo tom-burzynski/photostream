@@ -30,37 +30,6 @@ jobs:
         run: |
           python3 -m py_compile build.py
 
-      - name: Test Docker build
-        run: |
-          docker build -t photostream-test .
-
-      - name: Test Docker container startup
-        run: |
-          # Create test directories
-          mkdir -p test-originals test-site
-
-          # Start container with minimal config
-          docker run -d \
-            --name photostream-test \
-            -e RUN_ON_STARTUP=false \
-            -e WEB_SERVER_PORT=8080 \
-            -v "$(pwd)/test-originals:/app/originals" \
-            -v "$(pwd)/test-site:/app/site" \
-            photostream-test
-
-          # Wait for container to be ready
-          sleep 5
-
-          # Check if container is running
-          docker ps | grep photostream-test
-
-          # Check logs for errors
-          docker logs photostream-test
-
-          # Cleanup
-          docker stop photostream-test
-          docker rm photostream-test
-
   shellcheck:
     runs-on: ubuntu-latest
 
