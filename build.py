@@ -1384,15 +1384,24 @@ def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any
             print("Error: rclone method specified but rclone_destination not configured", file=sys.stderr)
             return
 
-        cmd = ["rclone", "sync", "--verbose", str(output_dir), destination]
+        print(f"Syncing {output_dir} to {destination}...", flush=True)
+        cmd = ["rclone", "sync", "--progress", "--stats-one-line", str(output_dir), destination]
         try:
             import subprocess
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            print(result.stdout, flush=True)
-            print(f"Successfully deployed to {destination} via rclone", flush=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Error deploying via rclone: {e}", file=sys.stderr)
-            print(e.stderr, file=sys.stderr)
+            # Use Popen to stream output in real-time
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+
+            # Stream output line by line
+            if process.stdout:
+                for line in process.stdout:
+                    print(line, end='', flush=True)
+
+            process.wait()
+
+            if process.returncode == 0:
+                print(f"\nSuccessfully deployed to {destination} via rclone", flush=True)
+            else:
+                print(f"\nError deploying via rclone (exit code {process.returncode})", file=sys.stderr)
         except FileNotFoundError:
             print("Error: rclone command not found. Please install rclone.", file=sys.stderr)
 
