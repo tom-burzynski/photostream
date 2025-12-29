@@ -1385,16 +1385,20 @@ def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any
             return
 
         print(f"Syncing {output_dir} to {destination}...", flush=True)
-        cmd = ["rclone", "sync", "--progress", "--stats-one-line", str(output_dir), destination]
+        cmd = ["rclone", "sync", "--progress", "--stats", "1s", str(output_dir), destination]
         try:
             import subprocess
-            # Use Popen to stream output in real-time
+            # Use Popen to stream output in real-time with carriage return handling
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
-            # Stream output line by line
+            # Stream output line by line, clearing previous progress lines
             if process.stdout:
                 for line in process.stdout:
-                    print(line, end='', flush=True)
+                    # Clean up line and handle carriage returns
+                    line = line.strip()
+                    if line:
+                        # Clear line and print progress
+                        print(f"\r{line}", end='', flush=True)
 
             process.wait()
 
