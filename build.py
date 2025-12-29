@@ -1385,27 +1385,16 @@ def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any
             return
 
         print(f"Syncing {output_dir} to {destination}...", flush=True)
-        cmd = ["rclone", "sync", "--progress", "--stats", "1s", str(output_dir), destination]
+        cmd = ["rclone", "sync", "--progress", str(output_dir), destination]
         try:
             import subprocess
-            # Use Popen to stream output in real-time with carriage return handling
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            # Run rclone with direct output to terminal (no capture)
+            result = subprocess.run(cmd)
 
-            # Stream output line by line, clearing previous progress lines
-            if process.stdout:
-                for line in process.stdout:
-                    # Clean up line and handle carriage returns
-                    line = line.strip()
-                    if line:
-                        # Clear line and print progress
-                        print(f"\r{line}", end='', flush=True)
-
-            process.wait()
-
-            if process.returncode == 0:
+            if result.returncode == 0:
                 print(f"\nSuccessfully deployed to {destination} via rclone", flush=True)
             else:
-                print(f"\nError deploying via rclone (exit code {process.returncode})", file=sys.stderr)
+                print(f"\nError deploying via rclone (exit code {result.returncode})", file=sys.stderr)
         except FileNotFoundError:
             print("Error: rclone command not found. Please install rclone.", file=sys.stderr)
 
