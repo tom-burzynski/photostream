@@ -268,9 +268,122 @@
 {% endfor %}  <li></li>
 </ul>
 <script>
-const photos = {{ photos_json | safe }};   // [{src,w,h,name,id,page}] - needed for month picker
+let allPhotos = {{ photos_json | safe }};   // Initial page of photos
 const monthData = {{ month_data | safe }}; // [{year,month,label,photo_id}]
 let didInitialHashScroll = false;
+
+// Infinite scroll state
+let currentPage = 0;
+let isLoadingPage = false;
+let hasMorePages = true;
+
+// Load next page of photos
+async function loadNextPage() {
+  if (isLoadingPage || !hasMorePages) return;
+
+  isLoadingPage = true;
+  const nextPage = currentPage + 1;
+
+  try {
+    const response = await fetch(`./data/page_${nextPage}.json`);
+    if (!response.ok) {
+      hasMorePages = false;
+      return;
+    }
+
+    const data = await response.json();
+    const newPhotos = data.photos;
+    hasMorePages = data.has_more;
+
+    if (newPhotos && newPhotos.length > 0) {
+      // Add photos to the gallery
+      appendPhotosToGallery(newPhotos);
+      allPhotos = allPhotos.concat(newPhotos);
+      currentPage = nextPage;
+    } else {
+      hasMorePages = false;
+    }
+  } catch (error) {
+    console.error('Error loading next page:', error);
+    hasMorePages = false;
+  } finally {
+    isLoadingPage = false;
+  }
+}
+
+// Append photos to the gallery DOM
+function appendPhotosToGallery(photos) {
+  const gallery = document.getElementById('gallery');
+  const lastItem = gallery.querySelector('li:last-child'); // The empty flex-grow li
+
+  photos.forEach(photo => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = photo.page;
+    a.id = photo.id;
+    if (photo.bg_color) {
+      a.style.backgroundColor = photo.bg_color;
+    }
+
+    const img = document.createElement('img');
+    img.src = photo.src;
+    img.alt = photo.name;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+
+    // Setup fade-in on load
+    img.addEventListener('load', () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          img.classList.add('loaded');
+        });
+      });
+    }, { once: true });
+
+    // Handle already-cached images
+    if (img.complete && img.naturalHeight !== 0) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          img.classList.add('loaded');
+        });
+      });
+    }
+
+    a.appendChild(img);
+    li.appendChild(a);
+
+    // Insert before the last empty li
+    gallery.insertBefore(li, lastItem);
+
+    // Attach click handler for overlay
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (window.openPhotoOverlay) {
+        window.openPhotoOverlay(photo.page, photo.id);
+      }
+    });
+  });
+}
+
+// Infinite scroll observer - trigger loading when near bottom
+const scrollObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting && hasMorePages && !isLoadingPage) {
+      loadNextPage();
+    }
+  });
+}, {
+  rootMargin: '800px' // Start loading when within 800px of bottom
+});
+
+// Observe the last empty li element for infinite scroll
+function setupInfiniteScroll() {
+  const gallery = document.getElementById('gallery');
+  const lastItem = gallery.querySelector('li:last-child');
+  if (lastItem) {
+    scrollObserver.observe(lastItem);
+  }
+}
 
 // Handle fade-in for all images (eager and lazy)
 document.addEventListener('DOMContentLoaded', () => {
@@ -299,6 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
     handleInitialHashScroll();
     didInitialHashScroll = true;
   }
+
+  // Setup infinite scroll
+  setupInfiniteScroll();
 });
 
 /**
@@ -416,9 +532,9 @@ function updateCurrentMonthHighlight() {
   const select = document.getElementById('month-select');
   if (!select || !monthData || monthData.length === 0) return;
 
-  // Build index map once
-  if (!photoIndexMap) {
-    photoIndexMap = new Map(photos.map((p, i) => [p.id, i]));
+  // Build index map once (rebuild when photos added)
+  if (!photoIndexMap || photoIndexMap.size !== allPhotos.length) {
+    photoIndexMap = new Map(allPhotos.map((p, i) => [p.id, i]));
   }
 
   // Find the first photo currently visible near the top of the viewport
@@ -429,8 +545,8 @@ function updateCurrentMonthHighlight() {
   let minDistance = Infinity;
 
   // Find the photo closest to the top third of viewport
-  for (let i = 0; i < photos.length; i++) {
-    const photoEl = document.getElementById(photos[i].id);
+  for (let i = 0; i < allPhotos.length; i++) {
+    const photoEl = document.getElementById(allPhotos[i].id);
     if (!photoEl) continue;
 
     const rect = photoEl.getBoundingClientRect();
@@ -441,7 +557,7 @@ function updateCurrentMonthHighlight() {
       const distance = Math.abs(elemTop - viewportMiddle);
       if (distance < minDistance) {
         minDistance = distance;
-        currentPhotoId = photos[i].id;
+        currentPhotoId = allPhotos[i].id;
       }
     }
   }
@@ -514,6 +630,9 @@ function initPhotoOverlay() {
     history.pushState({ photoId }, '', url);
   }
 
+  // Make openPhotoOverlay globally accessible for dynamically added photos
+  window.openPhotoOverlay = openPhotoOverlay;
+
   function closePhotoOverlay() {
     overlay.classList.remove('visible');
     document.body.style.overflow = ''; // Re-enable scrolling
@@ -526,6 +645,7 @@ function initPhotoOverlay() {
   }
 
   // Handle photo link clicks - open in overlay instead of navigating
+  // Only attach to initial photos (dynamic photos get handlers in appendPhotosToGallery)
   document.querySelectorAll('#gallery a').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
