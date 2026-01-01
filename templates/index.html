@@ -407,19 +407,21 @@ function appendPhotosToGallery(photos) {
   const lastItem = gallery.querySelector('li:last-child'); // The empty flex-grow li
 
   photos.forEach(photo => {
-    // Check if this photo is the first photo of a month and add an anchor marker
+    const li = document.createElement('li');
+
+    // Check if this photo is the first photo of a month and add an anchor marker inside the li
     const monthEntry = monthData.find(m => m.photo_id === photo.id);
     if (monthEntry) {
-      // Create invisible anchor marker for this month
+      // Create invisible anchor marker for this month at the top of the li
       const monthAnchor = document.createElement('span');
       monthAnchor.id = `month-${photo.id}`;
-      monthAnchor.style.position = 'absolute';
-      monthAnchor.style.visibility = 'hidden';
-      monthAnchor.style.pointerEvents = 'none';
-      gallery.insertBefore(monthAnchor, lastItem);
+      monthAnchor.style.display = 'block';
+      monthAnchor.style.height = '0';
+      monthAnchor.style.width = '0';
+      monthAnchor.style.overflow = 'hidden';
+      li.appendChild(monthAnchor);
     }
 
-    const li = document.createElement('li');
     const a = document.createElement('a');
     a.href = photo.page;
     a.id = photo.id;
