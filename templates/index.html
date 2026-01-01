@@ -311,6 +311,57 @@ async function loadNextPage() {
   }
 }
 
+// Load a specific page by number
+async function loadSpecificPage(pageNum) {
+  if (pageNum <= currentPage) return true; // Already loaded
+
+  try {
+    const response = await fetch(`./data/page_${pageNum}.json`);
+    if (!response.ok) return false;
+
+    const data = await response.json();
+    const newPhotos = data.photos;
+
+    if (newPhotos && newPhotos.length > 0) {
+      appendPhotosToGallery(newPhotos);
+      allPhotos = allPhotos.concat(newPhotos);
+      currentPage = pageNum;
+      hasMorePages = data.has_more;
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`Error loading page ${pageNum}:`, error);
+    return false;
+  }
+}
+
+// Load all pages up to and including the one containing a specific photo
+async function loadPagesUntilPhoto(photoId) {
+  // Check if photo is already loaded
+  if (allPhotos.some(p => p.id === photoId)) {
+    return true;
+  }
+
+  // Load pages sequentially until we find the photo
+  let pageNum = currentPage + 1;
+  const maxPages = 100; // Safety limit to prevent infinite loops
+
+  while (pageNum < maxPages) {
+    const success = await loadSpecificPage(pageNum);
+    if (!success) break;
+
+    // Check if we've loaded the target photo
+    if (allPhotos.some(p => p.id === photoId)) {
+      return true;
+    }
+
+    pageNum++;
+  }
+
+  return false;
+}
+
 // Append photos to the gallery DOM
 function appendPhotosToGallery(photos) {
   const gallery = document.getElementById('gallery');
@@ -422,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
  * Handles lazy-loaded images by waiting for them to load before scrolling.
  * Cancels scroll if user manually scrolls during the process.
  */
-function handleInitialHashScroll() {
+async function handleInitialHashScroll() {
   const urlParams = new URLSearchParams(location.search);
   const hasPhotoParam = urlParams.has('photo');
   let targetId = null;
@@ -433,7 +484,16 @@ function handleInitialHashScroll() {
 
   if (!targetId) return;
 
-  const el = document.getElementById(targetId);
+  let el = document.getElementById(targetId);
+
+  // If element not found, try to load pages until we find it
+  if (!el) {
+    const loaded = await loadPagesUntilPhoto(targetId);
+    if (loaded) {
+      el = document.getElementById(targetId);
+    }
+  }
+
   if (!el) return;
 
   const img = el.querySelector('img');
@@ -512,10 +572,20 @@ function initMonthPicker() {
   });
 
   // Handle selection - scroll to selected month's first photo
-  select.addEventListener('change', (e) => {
+  select.addEventListener('change', async (e) => {
     const photoId = e.target.value;
     if (photoId) {
-      const element = document.getElementById(photoId);
+      // Check if photo is already in DOM
+      let element = document.getElementById(photoId);
+
+      if (!element) {
+        // Photo not loaded yet - load pages until we find it
+        const loaded = await loadPagesUntilPhoto(photoId);
+        if (loaded) {
+          element = document.getElementById(photoId);
+        }
+      }
+
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         // Selected value persists - updateCurrentMonthHighlight will keep it updated
