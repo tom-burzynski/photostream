@@ -663,6 +663,11 @@ function initMonthPicker() {
 
       // Now scroll to the month anchor marker (created when photo was appended)
       const monthAnchorId = `month-${photoId}`;
+
+      // Wait for layout to fully stabilize before scrolling
+      // This is critical when many pages were just loaded
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const monthAnchor = document.getElementById(monthAnchorId);
 
       if (monthAnchor) {
@@ -672,15 +677,22 @@ function initMonthPicker() {
         isProgrammaticScroll = true;
         if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
 
-        // Scroll to the anchor marker
-        monthAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        console.log(`Scrolled to ${monthAnchorId}`);
+        // Use requestAnimationFrame to ensure layout is calculated
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const finalAnchor = document.getElementById(monthAnchorId);
+            if (finalAnchor) {
+              finalAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              console.log(`Scrolled to ${monthAnchorId}`);
+            }
 
-        // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
-        programmaticScrollTimeout = setTimeout(() => {
-          isProgrammaticScroll = false;
-          console.log('Programmatic scroll complete, re-enabling auto-update');
-        }, 1500);
+            // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
+            programmaticScrollTimeout = setTimeout(() => {
+              isProgrammaticScroll = false;
+              console.log('Programmatic scroll complete, re-enabling auto-update');
+            }, 1500);
+          });
+        });
       } else {
         console.error(`Could not find month anchor ${monthAnchorId}`);
       }
