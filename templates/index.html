@@ -654,13 +654,22 @@ function initMonthPicker() {
         isProgrammaticScroll = true;
         if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
 
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Wait for layout to stabilize before scrolling (important for dynamically loaded content)
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const finalElement = document.getElementById(photoId);
+            if (finalElement) {
+              finalElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              console.log(`Scrolled to ${photoId}`);
+            }
 
-        // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
-        programmaticScrollTimeout = setTimeout(() => {
-          isProgrammaticScroll = false;
-          console.log('Programmatic scroll complete, re-enabling auto-update');
-        }, 1500);
+            // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
+            programmaticScrollTimeout = setTimeout(() => {
+              isProgrammaticScroll = false;
+              console.log('Programmatic scroll complete, re-enabling auto-update');
+            }, 1500);
+          });
+        });
       } else {
         console.error(`Could not find photo ${photoId} even after loading pages`);
       }
