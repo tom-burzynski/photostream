@@ -438,6 +438,7 @@ class Config:
     workers: int = 4
     geocode: bool = False
     regeocode: bool = False
+    page_size: int = 30  # Number of photos per page for infinite scroll
     title: str = "[photostream]"
     description: str = ""
     footer: str = ""
@@ -1099,14 +1100,39 @@ class PhotoProcessor:
         # Generate month/year data for date picker
         month_data = self._generate_month_data(meta, datetime_lookup)
 
-        # Write index.html with LCP optimization
+        # Generate paginated JSON data for infinite scroll
+        data_dir = self.config.out_dir / "data"
+        data_dir.mkdir(exist_ok=True)
+
+        # Split photos into pages
+        page_size = self.config.page_size
+        total_pages = (len(meta) + page_size - 1) // page_size if meta else 0
+
+        for page_num in range(total_pages):
+            start_idx = page_num * page_size
+            end_idx = min(start_idx + page_size, len(meta))
+            page_photos = meta[start_idx:end_idx]
+
+            page_data = {
+                "photos": page_photos,
+                "page": page_num,
+                "total_pages": total_pages,
+                "has_more": page_num < total_pages - 1
+            }
+
+            page_file = data_dir / f"page_{page_num}.json"
+            page_file.write_text(json.dumps(page_data, ensure_ascii=False), encoding="utf-8")
+
+        # Write index.html with LCP optimization (only first page inline)
         preload_images = meta[:self.config.preload_count] if meta else []
+        first_page_photos = meta[:page_size] if meta else []
+
         index_ctx = IndexPageContext(
-            photos_json=json.dumps(meta, ensure_ascii=False),
+            photos_json=json.dumps(first_page_photos, ensure_ascii=False),
             month_data=json.dumps(month_data, ensure_ascii=False),
             preload_images=preload_images,
             preload_count=self.config.preload_count,
-            photos=meta,
+            photos=first_page_photos,
             title=self.config.title,
             description=self.config.description,
             footer=self.config.footer,
@@ -1200,6 +1226,7 @@ def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
         "template_dir": None,
         "preview_height": DEFAULT_PREVIEW_HEIGHT,
         "preload_count": 20,
+        "page_size": 30,
         "rename": False,
         "title": "[photostream]",
         "description": "",
@@ -1240,6 +1267,8 @@ def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
                 config_defaults["preview_height"] = build_section.getint("preview_height")
             if "preload_count" in build_section:
                 config_defaults["preload_count"] = build_section.getint("preload_count")
+            if "page_size" in build_section:
+                config_defaults["page_size"] = build_section.getint("page_size")
             if "rename" in build_section:
                 config_defaults["rename"] = build_section.getboolean("rename")
             if "geocode" in build_section:
@@ -1309,6 +1338,8 @@ def parse_args():
                     help=f"Maximum height for preview images in pixels (default: {config_defaults['preview_height']}). Lower values reduce file sizes and improve loading speed.")
     ap.add_argument("--preload-count", type=int, default=config_defaults["preload_count"],
                     help=f"Number of first images to preload for LCP optimization (default: {config_defaults['preload_count']}). Higher values may slow initial page load.")
+    ap.add_argument("--page-size", type=int, default=config_defaults["page_size"],
+                    help=f"Number of photos to load per page for infinite scroll (default: {config_defaults['page_size']}).")
     ap.add_argument("--rename", action="store_true", default=config_defaults["rename"],
                     help="Rename image files based on EXIF datetime (format: YYYY-MM-DD-HH-MM-SS.ext) before processing.")
     ap.add_argument("--title", type=str, default=config_defaults["title"],
@@ -1444,6 +1475,7 @@ def main():
             out_dir=args.out_dir or Path.cwd(),
             max_preview_height=args.preview_height,
             preload_count=args.preload_count,
+            page_size=args.page_size,
             workers=args.workers,
             geocode=args.geocode,
             regeocode=args.regeocode,
