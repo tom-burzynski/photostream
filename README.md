@@ -13,16 +13,18 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 - Extracts basic metadata (timestamps, image dimensions) with caching to speed up repeated runs.
 - Extracts GPS coordinates from EXIF data and performs reverse geocoding to display location names.
 - Creates per-photo detail pages with navigation to adjacent images and location/timestamp overlays.
-- Produces an index.html, per-photo pages under view/, and preview images under previews/.
+- Produces an index.html, per-photo pages under view/, preview images under previews/, and paginated JSON data for infinite scroll.
 - Uses templates for customizable HTML; supports Jinja2 if available or falls back to simple string templates.
 - Includes a thumbnail/gradient color scheme derived from image content for background/accent colors.
 - Supports configurable site metadata: custom title, description, and footer messages.
+- **Infinite scroll loading**: Dynamically loads photos as you scroll, reducing initial page load time for large galleries.
 
 ## How it works
 - The build.py script is the main engine. It walks the source directory, generates previews, extracts metadata, and writes static pages.
 - A lightweight TemplateRenderer renders index.html and photo.html using either Jinja2 or a fallback template system.
 - The UI renders a justified grid of images; images are lazy-loaded with a pronounced fade-in effect for a smooth experience.
 - Photos open in an overlay viewer with left/right navigation zones and a close button, keeping the grid loaded underneath for seamless navigation.
+- **Infinite scroll pagination**: Photos are split into pages (default 30 per page) with JSON files generated for each page. The initial page loads inline for fast rendering, and additional pages load automatically via IntersectionObserver as you scroll within 800px of the bottom.
 
 ## Navigating the Gallery (End-User Guide)
 
@@ -31,7 +33,8 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 **Browsing Photos:**
 - Photos are displayed in a responsive justified grid layout that adapts to your screen size
 - Scroll down to view your entire photo collection in reverse chronological order (newest first)
-- Images lazy-load as you scroll for optimal performance
+- Images lazy-load as you scroll for optimal performance with infinite scroll pagination
+- Additional photos load automatically as you approach the bottom of the page (no pagination buttons needed)
 - Click any photo to view the full-size version with details
 
 **Month/Year Picker:**
@@ -80,6 +83,9 @@ For installation and deployment instructions, see [INSTALLATION.md](INSTALLATION
 - LCP (Largest Contentful Paint) optimization: First few images are preloaded with high priority for faster above-the-fold loading.
 - Preload tags in HTML head and fetchPriority='high' ensure critical images load first.
 - GPS coordinates and geocoded location names are cached to avoid repeated EXIF parsing and API calls.
+- **Infinite scroll pagination**: Only the first page of photos (default 30) loads in the initial HTML, drastically reducing initial page weight. For a 468-photo gallery: initial load is ~14KB of JSON vs ~100KB+ if all photos were inline.
+- Additional pages load on-demand as paginated JSON files (~14KB each), triggered automatically when scrolling within 800px of the bottom.
+- Page size is configurable via `page_size` parameter (default: 30). Lower values = faster initial load, more frequent dynamic loading.
 
 ## Known limitations
 - Requires a writable output directory; without permissions, the build may fail.
