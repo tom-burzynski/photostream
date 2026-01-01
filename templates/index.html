@@ -601,6 +601,9 @@ function initMonthPicker() {
   select.addEventListener('change', async (e) => {
     const photoId = e.target.value;
     if (photoId) {
+      // Update URL hash to persist selection across reloads
+      window.location.hash = photoId;
+
       // Check if photo is already in DOM
       let element = document.getElementById(photoId);
 
