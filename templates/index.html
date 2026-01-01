@@ -367,19 +367,33 @@ async function loadPagesUntilPhoto(photoId) {
   const maxAttempts = 100; // Safety limit to prevent infinite loops
   let attempts = 0;
 
-  while (attempts < maxAttempts && hasMorePages) {
+  while (attempts < maxAttempts) {
     attempts++;
-    const nextPage = currentPage + 1;
 
-    const success = await loadSpecificPage(nextPage);
-    if (!success) break;
-
-    // Check if we've loaded the target photo
+    // Check if we've already found the photo (in case of race condition)
     if (allPhotos.some(p => p.id === photoId)) {
       return true;
     }
+
+    // If no more pages available, we can't find it
+    if (!hasMorePages) {
+      console.warn(`Photo ${photoId} not found - no more pages available`);
+      return false;
+    }
+
+    const nextPage = currentPage + 1;
+    const success = await loadSpecificPage(nextPage);
+
+    if (!success) {
+      console.warn(`Failed to load page ${nextPage}`);
+      return false;
+    }
+
+    // Small delay to allow DOM updates to propagate
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
 
+  console.warn(`Photo ${photoId} not found after ${maxAttempts} attempts`);
   return false;
 }
 
@@ -601,6 +615,8 @@ function initMonthPicker() {
   select.addEventListener('change', async (e) => {
     const photoId = e.target.value;
     if (photoId) {
+      console.log(`Month picker: Looking for photo ${photoId}, currently on page ${currentPage}, hasMorePages=${hasMorePages}`);
+
       // Update URL hash to persist selection across reloads
       window.location.hash = photoId;
 
@@ -608,16 +624,21 @@ function initMonthPicker() {
       let element = document.getElementById(photoId);
 
       if (!element) {
+        console.log(`Photo ${photoId} not in DOM, loading pages...`);
         // Photo not loaded yet - load pages until we find it
         const loaded = await loadPagesUntilPhoto(photoId);
+        console.log(`loadPagesUntilPhoto result: ${loaded}, currentPage now: ${currentPage}`);
         if (loaded) {
           element = document.getElementById(photoId);
         }
       }
 
       if (element) {
+        console.log(`Found element, scrolling to ${photoId}`);
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         // Selected value persists - updateCurrentMonthHighlight will keep it updated
+      } else {
+        console.error(`Could not find photo ${photoId} even after loading pages`);
       }
     }
   });
