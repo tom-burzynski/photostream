@@ -310,13 +310,27 @@ async function loadNextPage() {
   }
 }
 
-// Load a specific page by number
+// Load a specific page by number (expects sequential page loading)
 async function loadSpecificPage(pageNum) {
   if (pageNum <= currentPage) return true; // Already loaded
 
+  // Prevent duplicate requests
+  if (isLoadingPage) {
+    // Wait for current request to finish
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return loadSpecificPage(pageNum);
+  }
+
+  isLoadingPage = true;
+
   try {
     const response = await fetch(`./data/page_${pageNum}.json`);
-    if (!response.ok) return false;
+    if (!response.ok) {
+      // Page doesn't exist - we've reached the end
+      hasMorePages = false;
+      isLoadingPage = false;
+      return false;
+    }
 
     const data = await response.json();
     const newPhotos = data.photos;
@@ -326,11 +340,17 @@ async function loadSpecificPage(pageNum) {
       allPhotos = allPhotos.concat(newPhotos);
       currentPage = pageNum;
       hasMorePages = data.has_more;
+      isLoadingPage = false;
       return true;
     }
+
+    hasMorePages = false;
+    isLoadingPage = false;
     return false;
   } catch (error) {
     console.error(`Error loading page ${pageNum}:`, error);
+    hasMorePages = false;
+    isLoadingPage = false;
     return false;
   }
 }
@@ -343,19 +363,21 @@ async function loadPagesUntilPhoto(photoId) {
   }
 
   // Load pages sequentially until we find the photo
-  let pageNum = currentPage + 1;
-  const maxPages = 100; // Safety limit to prevent infinite loops
+  // We need to load pages in order (currentPage + 1, currentPage + 2, etc.)
+  const maxAttempts = 100; // Safety limit to prevent infinite loops
+  let attempts = 0;
 
-  while (pageNum < maxPages) {
-    const success = await loadSpecificPage(pageNum);
+  while (attempts < maxAttempts && hasMorePages) {
+    attempts++;
+    const nextPage = currentPage + 1;
+
+    const success = await loadSpecificPage(nextPage);
     if (!success) break;
 
     // Check if we've loaded the target photo
     if (allPhotos.some(p => p.id === photoId)) {
       return true;
     }
-
-    pageNum++;
   }
 
   return false;
