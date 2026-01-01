@@ -255,7 +255,6 @@
 </div>
 <div id="month-picker">
   <select id="month-select" aria-label="Jump to month">
-    <option value="">Jump to month...</option>
   </select>
 </div>
 {% if link1_title and link1_url or link2_title and link2_url or link3_title and link3_url or footer %}<div id="site-footer">{% if link1_title and link1_url %}<a href="{{ link1_url }}" target="_blank" rel="noopener noreferrer">{{ link1_title }}</a>{% endif %}{% if link1_title and link1_url and (link2_title and link2_url or link3_title and link3_url) %}<span class="separator">|</span>{% endif %}{% if link2_title and link2_url %}<a href="{{ link2_url }}" target="_blank" rel="noopener noreferrer">{{ link2_title }}</a>{% endif %}{% if link2_title and link2_url and link3_title and link3_url %}<span class="separator">|</span>{% endif %}{% if link3_title and link3_url %}<a href="{{ link3_url }}" target="_blank" rel="noopener noreferrer">{{ link3_title }}</a>{% endif %}{% if (link1_title and link1_url or link2_title and link2_url or link3_title and link3_url) and footer %}<span class="separator">|</span>{% endif %}{{ footer }}</div>{% endif %}
@@ -570,6 +569,11 @@ function initMonthPicker() {
 
     select.appendChild(optgroup);
   });
+
+  // Set initial value to the first month (most recent)
+  if (monthData.length > 0) {
+    select.value = monthData[0].photo_id;
+  }
 
   // Handle selection - scroll to selected month's first photo
   select.addEventListener('change', async (e) => {
