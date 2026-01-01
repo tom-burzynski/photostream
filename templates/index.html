@@ -276,6 +276,10 @@ let currentPage = 0;
 let isLoadingPage = false;
 let hasMorePages = true;
 
+// Month picker scroll state - prevent auto-update during programmatic scroll
+let isProgrammaticScroll = false;
+let programmaticScrollTimeout = null;
+
 // Load next page of photos
 async function loadNextPage() {
   if (isLoadingPage || !hasMorePages) return;
@@ -546,11 +550,21 @@ async function handleInitialHashScroll() {
   const scrollToTarget = () => {
     if (userHasScrolled) return; // Don't interrupt user's scroll
 
+    // Disable auto-update during programmatic scroll
+    isProgrammaticScroll = true;
+    if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (userHasScrolled) return; // Check again before scrolling
         el.scrollIntoView({ block: 'center' });
         setTimeout(() => el.blur(), 0);
+
+        // Re-enable auto-update after scroll completes
+        programmaticScrollTimeout = setTimeout(() => {
+          isProgrammaticScroll = false;
+          console.log('Initial hash scroll complete, re-enabling auto-update');
+        }, 1500);
       });
     });
   };
@@ -635,8 +649,18 @@ function initMonthPicker() {
 
       if (element) {
         console.log(`Found element, scrolling to ${photoId}`);
+
+        // Disable auto-update during programmatic scroll
+        isProgrammaticScroll = true;
+        if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
+
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        // Selected value persists - updateCurrentMonthHighlight will keep it updated
+
+        // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
+        programmaticScrollTimeout = setTimeout(() => {
+          isProgrammaticScroll = false;
+          console.log('Programmatic scroll complete, re-enabling auto-update');
+        }, 1500);
       } else {
         console.error(`Could not find photo ${photoId} even after loading pages`);
       }
@@ -649,6 +673,12 @@ let photoIndexMap = null;
 
 // Update current month display and highlighting based on viewport
 function updateCurrentMonthHighlight() {
+  // Skip update if we're in the middle of a programmatic scroll
+  if (isProgrammaticScroll) {
+    console.log('Skipping auto-update during programmatic scroll');
+    return;
+  }
+
   const select = document.getElementById('month-select');
   if (!select || !monthData || monthData.length === 0) return;
 
