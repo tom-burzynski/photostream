@@ -407,6 +407,18 @@ function appendPhotosToGallery(photos) {
   const lastItem = gallery.querySelector('li:last-child'); // The empty flex-grow li
 
   photos.forEach(photo => {
+    // Check if this photo is the first photo of a month and add an anchor marker
+    const monthEntry = monthData.find(m => m.photo_id === photo.id);
+    if (monthEntry) {
+      // Create invisible anchor marker for this month
+      const monthAnchor = document.createElement('span');
+      monthAnchor.id = `month-${photo.id}`;
+      monthAnchor.style.position = 'absolute';
+      monthAnchor.style.visibility = 'hidden';
+      monthAnchor.style.pointerEvents = 'none';
+      gallery.insertBefore(monthAnchor, lastItem);
+    }
+
     const li = document.createElement('li');
     const a = document.createElement('a');
     a.href = photo.page;
@@ -634,44 +646,41 @@ function initMonthPicker() {
       // Update URL hash to persist selection across reloads
       window.location.hash = photoId;
 
-      // Check if photo is already in DOM
-      let element = document.getElementById(photoId);
-
-      if (!element) {
+      // First, load pages until we have the photo
+      const photoElement = document.getElementById(photoId);
+      if (!photoElement) {
         console.log(`Photo ${photoId} not in DOM, loading pages...`);
-        // Photo not loaded yet - load pages until we find it
         const loaded = await loadPagesUntilPhoto(photoId);
         console.log(`loadPagesUntilPhoto result: ${loaded}, currentPage now: ${currentPage}`);
-        if (loaded) {
-          element = document.getElementById(photoId);
+
+        if (!loaded) {
+          console.error(`Could not find photo ${photoId} even after loading pages`);
+          return;
         }
       }
 
-      if (element) {
-        console.log(`Found element, scrolling to ${photoId}`);
+      // Now scroll to the month anchor marker (created when photo was appended)
+      const monthAnchorId = `month-${photoId}`;
+      const monthAnchor = document.getElementById(monthAnchorId);
+
+      if (monthAnchor) {
+        console.log(`Found month anchor, scrolling to ${monthAnchorId}`);
 
         // Disable auto-update during programmatic scroll
         isProgrammaticScroll = true;
         if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
 
-        // Wait for layout to stabilize before scrolling (important for dynamically loaded content)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const finalElement = document.getElementById(photoId);
-            if (finalElement) {
-              finalElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              console.log(`Scrolled to ${photoId}`);
-            }
+        // Scroll to the anchor marker
+        monthAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        console.log(`Scrolled to ${monthAnchorId}`);
 
-            // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
-            programmaticScrollTimeout = setTimeout(() => {
-              isProgrammaticScroll = false;
-              console.log('Programmatic scroll complete, re-enabling auto-update');
-            }, 1500);
-          });
-        });
+        // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
+        programmaticScrollTimeout = setTimeout(() => {
+          isProgrammaticScroll = false;
+          console.log('Programmatic scroll complete, re-enabling auto-update');
+        }, 1500);
       } else {
-        console.error(`Could not find photo ${photoId} even after loading pages`);
+        console.error(`Could not find month anchor ${monthAnchorId}`);
       }
     }
   });
