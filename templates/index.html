@@ -206,6 +206,67 @@ let currentPage = 0;
 let isLoadingPage = false;
 let hasMorePages = true;
 
+// Photo index for direct links (loaded on demand)
+let photoIndex = null;
+let loadedPages = new Set([0]); // Track which pages are loaded (page 0 is inline)
+
+// Load photo index for direct link lookups
+async function loadPhotoIndex() {
+  if (photoIndex) return photoIndex;
+
+  try {
+    const response = await fetch('./data/photo-index.json');
+    if (response.ok) {
+      photoIndex = await response.json();
+      return photoIndex;
+    }
+  } catch (error) {
+    console.error('Error loading photo index:', error);
+  }
+  return null;
+}
+
+// Load a specific page by page number
+async function loadSpecificPage(pageNum) {
+  if (loadedPages.has(pageNum)) {
+    return true; // Already loaded
+  }
+
+  try {
+    const response = await fetch(`./data/page_${pageNum}.json`);
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await response.json();
+    const newPhotos = data.photos;
+
+    if (newPhotos && newPhotos.length > 0) {
+      // Add photos to the gallery
+      appendPhotosToGallery(newPhotos);
+      allPhotos = allPhotos.concat(newPhotos);
+      loadedPages.add(pageNum);
+      return true;
+    }
+  } catch (error) {
+    console.error(`Error loading page ${pageNum}:`, error);
+  }
+  return false;
+}
+
+// Load all pages from 0 up to targetPage (for background loading)
+async function loadPagesUpTo(targetPage) {
+  const pagesToLoad = [];
+  for (let i = 0; i <= targetPage; i++) {
+    if (!loadedPages.has(i)) {
+      pagesToLoad.push(i);
+    }
+  }
+
+  // Load pages in parallel for speed
+  await Promise.all(pagesToLoad.map(pageNum => loadSpecificPage(pageNum)));
+}
+
 // Load next page of photos
 async function loadNextPage() {
   if (isLoadingPage || !hasMorePages) return;
@@ -214,6 +275,13 @@ async function loadNextPage() {
   const nextPage = currentPage + 1;
 
   try {
+    // Check if already loaded
+    if (loadedPages.has(nextPage)) {
+      currentPage = nextPage;
+      isLoadingPage = false;
+      return;
+    }
+
     const response = await fetch(`./data/page_${nextPage}.json`);
     if (!response.ok) {
       hasMorePages = false;
@@ -228,6 +296,7 @@ async function loadNextPage() {
       // Add photos to the gallery
       appendPhotosToGallery(newPhotos);
       allPhotos = allPhotos.concat(newPhotos);
+      loadedPages.add(nextPage);
       currentPage = nextPage;
     } else {
       hasMorePages = false;
@@ -315,8 +384,16 @@ function setupInfiniteScroll() {
   }
 }
 
+// Disable browser's automatic scroll restoration to prevent reload issues
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+
 // Handle fade-in for all images (eager and lazy)
 document.addEventListener('DOMContentLoaded', () => {
+  // Reset scroll to top on page load (prevent browser from restoring scroll to wrong position)
+  window.scrollTo(0, 0);
+
   const allImages = document.querySelectorAll('#gallery img');
 
   allImages.forEach(img => {
@@ -416,6 +493,8 @@ function initPhotoOverlay() {
   const overlayFrame = document.getElementById('photo-frame');
   const overlayClose = document.getElementById('overlay-close');
 
+  let currentPhotoId = null; // Track currently viewed photo
+
   function scrollGridToPhoto(photoId) {
     const photoEl = document.getElementById(photoId);
     if (photoEl) {
@@ -424,13 +503,16 @@ function initPhotoOverlay() {
     }
   }
 
-  function openPhotoOverlay(photoUrl, photoId) {
+  function openPhotoOverlay(photoUrl, photoId, skipScroll = false) {
+    currentPhotoId = photoId; // Track current photo
     overlayFrame.src = photoUrl;
     overlay.classList.add('visible');
     document.body.style.overflow = 'hidden'; // Prevent background scrolling
 
-    // Scroll grid to current photo position (behind overlay)
-    scrollGridToPhoto(photoId);
+    // Scroll grid to current photo position (behind overlay) unless skipped
+    if (!skipScroll) {
+      scrollGridToPhoto(photoId);
+    }
 
     // Update URL without page reload
     const url = new URL(window.location);
@@ -445,6 +527,11 @@ function initPhotoOverlay() {
     overlay.classList.remove('visible');
     document.body.style.overflow = ''; // Re-enable scrolling
     overlayFrame.src = ''; // Unload iframe
+
+    // Scroll to the current photo's position in the grid when closing
+    if (currentPhotoId) {
+      scrollGridToPhoto(currentPhotoId);
+    }
 
     // Update URL to remove photo parameter
     const url = new URL(window.location);
@@ -461,6 +548,13 @@ function initPhotoOverlay() {
       const photoUrl = link.href;
       openPhotoOverlay(photoUrl, photoId);
     });
+  });
+
+  // Scroll to photo position on close button hover (preview where they'll land)
+  overlayClose.addEventListener('mouseenter', () => {
+    if (currentPhotoId) {
+      scrollGridToPhoto(currentPhotoId);
+    }
   });
 
   // Close overlay on button click
@@ -491,19 +585,47 @@ function initPhotoOverlay() {
   if (window.location.search.includes('photo=')) {
     const urlParams = new URLSearchParams(window.location.search);
     const photoId = urlParams.get('photo');
-    const photoEl = document.getElementById(photoId);
+    handleDirectPhotoLink(photoId, openPhotoOverlay);
+  }
+
+  // Handle direct photo link - load photo index, open overlay, then load grid pages in background
+  async function handleDirectPhotoLink(photoId, openPhotoOverlay) {
+    // First check if photo is already in DOM
+    let photoEl = document.getElementById(photoId);
     if (photoEl) {
       openPhotoOverlay(photoEl.href, photoId);
+      return;
     }
+
+    // Load photo index to find which page the photo is on
+    const index = await loadPhotoIndex();
+    if (!index || !index[photoId]) {
+      console.error(`Photo ${photoId} not found in index`);
+      return;
+    }
+
+    const photoInfo = index[photoId];
+    const targetPage = photoInfo.page;
+    const photoUrl = photoInfo.url;
+
+    // Open overlay immediately with the photo URL (skip initial scroll)
+    openPhotoOverlay(photoUrl, photoId, true);
+
+    // Load grid pages in background up to the target page
+    // Once loaded, scroll grid to photo position (behind overlay)
+    loadPagesUpTo(targetPage).then(() => {
+      const photoEl = document.getElementById(photoId);
+      if (photoEl) {
+        photoEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
   }
 
   // Listen for messages from photo page iframe (for navigation)
   window.addEventListener('message', (e) => {
     if (e.data.type === 'navigate') {
-      const photoEl = document.getElementById(e.data.photoId);
-      if (photoEl) {
-        openPhotoOverlay(photoEl.href, e.data.photoId);
-      }
+      // Use handleDirectPhotoLink for navigation too
+      handleDirectPhotoLink(e.data.photoId, openPhotoOverlay);
     } else if (e.data.type === 'close') {
       closePhotoOverlay();
     }
