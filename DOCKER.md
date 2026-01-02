@@ -4,19 +4,40 @@ This document explains how to deploy photostream using Docker with automatic fil
 
 ## Quick Start
 
-1. **Build and run with docker-compose:**
+Photostream provides two docker-compose configurations:
+
+### Option 1: Using Pre-built Image (Recommended)
+
+Use the official pre-built multi-platform image from GitHub Container Registry:
+
 ```bash
 docker-compose up -d
 ```
 
-2. **Add photos to your originals folder:**
+This uses `docker-compose.yml` (symlinked to `docker-compose.prebuilt.yml`), which pulls the latest image from `ghcr.io/tom-burzynski/photostream:latest`.
+
+### Option 2: Building Locally from Source
+
+Build the Docker image locally from your current source code:
+
+```bash
+docker-compose -f docker-compose.build.yml up -d
+```
+
+This is useful for development or if you've made local modifications to the code.
+
+---
+
+**After starting the container:**
+
+1. **Add photos to your originals folder:**
 ```bash
 # Photos will be automatically processed when added
 cp /path/to/photos/* ./originals/
 ```
 
-3. **View generated site:**
-The processed gallery will be available in the `./site` directory.
+2. **View generated site:**
+The processed gallery will be available in the `./site` directory and at `http://localhost:8080`.
 
 ## Configuration
 

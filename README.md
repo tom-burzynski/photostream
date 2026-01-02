@@ -14,7 +14,7 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 - Extracts GPS coordinates from EXIF data and performs reverse geocoding to display location names.
 - Creates per-photo detail pages with navigation to adjacent images and location/timestamp overlays.
 - Produces an index.html, per-photo pages under view/, preview images under previews/, and paginated JSON data for infinite scroll.
-- Uses templates for customizable HTML; supports Jinja2 if available or falls back to simple string templates.
+- Uses templates for customizable HTML.
 - Includes a thumbnail/gradient color scheme derived from image content for background/accent colors.
 - Supports configurable site metadata: custom title, description, and footer messages.
 - Dynamically loads photos as you scroll, reducing initial page load time for large galleries.
@@ -68,6 +68,22 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 ## Installation
 
 For installation and deployment instructions, see [INSTALLATION.md](INSTALLATION.md).
+
+## Docker Deployment
+
+Photostream includes full Docker support for containerized deployments with automatic file watching and rebuilding. For complete Docker setup instructions, configuration options, and deployment examples, see [DOCKER.md](DOCKER.md).
+
+**Quick start (using pre-built image):**
+```bash
+docker-compose up -d
+```
+
+**Or build locally from source:**
+```bash
+docker-compose -f docker-compose.build.yml up -d
+```
+
+This starts a container that monitors your originals directory, automatically rebuilds the gallery when photos are added or removed, and serves the gallery on port 8080 for live preview.
 
 ## Caching and performance
 - A small on-disk cache (.metadata_cache.pkl) stores image metadata, colors, GPS coordinates, location names, and preview hashes to speed up subsequent runs.
