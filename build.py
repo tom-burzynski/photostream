@@ -66,8 +66,10 @@ class MetadataCache:
     
     def __init__(self, cache_dir: Path):
         self.cache_dir = cache_dir
-        self.cache_file = cache_dir / ".metadata_cache.pkl"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Store cache in data/ subdirectory alongside pagination files
+        self.data_dir = cache_dir / "data"
+        self.cache_file = self.data_dir / ".metadata_cache.pkl"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         self._cache = self._load_cache()
         self._dirty = False
     
@@ -1190,7 +1192,7 @@ class PhotoProcessor:
             f"- {originals_dir}/* (copied originals)\n"
             f"- {previews_dir}/* (grid previews)\n"
             f"- {view_dir}/* ({n} pages)\n"
-            f"- .metadata_cache.pkl (cached metadata)"
+            f"- data/.metadata_cache.pkl (cached metadata)"
         )
 
 
