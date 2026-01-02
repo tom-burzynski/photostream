@@ -1074,10 +1074,19 @@ class PhotoProcessor:
         page_size = self.config.page_size
         total_pages = (len(meta) + page_size - 1) // page_size if meta else 0
 
+        # Build photo index mapping photo ID -> page number and URL
+        photo_index = {}
         for page_num in range(total_pages):
             start_idx = page_num * page_size
             end_idx = min(start_idx + page_size, len(meta))
             page_photos = meta[start_idx:end_idx]
+
+            # Add each photo to the index
+            for photo in page_photos:
+                photo_index[photo["id"]] = {
+                    "page": page_num,
+                    "url": photo["page"]
+                }
 
             page_data = {
                 "photos": page_photos,
@@ -1088,6 +1097,10 @@ class PhotoProcessor:
 
             page_file = data_dir / f"page_{page_num}.json"
             page_file.write_text(json.dumps(page_data, ensure_ascii=False), encoding="utf-8")
+
+        # Write photo index for direct photo link lookups
+        photo_index_file = data_dir / "photo-index.json"
+        photo_index_file.write_text(json.dumps(photo_index, ensure_ascii=False), encoding="utf-8")
 
         # Write index.html with LCP optimization (only first page inline)
         preload_images = meta[:self.config.preload_count] if meta else []
