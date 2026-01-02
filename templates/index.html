@@ -246,6 +246,10 @@ async function loadSpecificPage(pageNum) {
       appendPhotosToGallery(newPhotos);
       allPhotos = allPhotos.concat(newPhotos);
       loadedPages.add(pageNum);
+
+      // Update infinite scroll observer to watch new last item
+      setupInfiniteScroll();
+
       return true;
     }
   } catch (error) {
@@ -298,6 +302,9 @@ async function loadNextPage() {
       allPhotos = allPhotos.concat(newPhotos);
       loadedPages.add(nextPage);
       currentPage = nextPage;
+
+      // Update infinite scroll observer to watch new last item
+      setupInfiniteScroll();
     } else {
       hasMorePages = false;
     }
@@ -380,6 +387,9 @@ function setupInfiniteScroll() {
   const gallery = document.getElementById('gallery');
   const lastItem = gallery.querySelector('li:last-child');
   if (lastItem) {
+    // Unobserve all previous items first
+    scrollObserver.disconnect();
+    // Observe the current last item
     scrollObserver.observe(lastItem);
   }
 }
