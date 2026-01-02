@@ -67,6 +67,7 @@ temp/
 # AI assistant instructions
 CLAUDE.md
 AGENTS.md
+.claude/
 
 # Documentation (keep local only)
 docs/
