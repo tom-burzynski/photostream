@@ -248,7 +248,10 @@ async function loadSpecificPage(pageNum) {
       loadedPages.add(pageNum);
 
       // Update infinite scroll observer to watch new last item
-      setupInfiniteScroll();
+      // Use requestAnimationFrame to ensure DOM has settled
+      requestAnimationFrame(() => {
+        setupInfiniteScroll();
+      });
 
       return true;
     }
@@ -302,9 +305,6 @@ async function loadNextPage() {
       allPhotos = allPhotos.concat(newPhotos);
       loadedPages.add(nextPage);
       currentPage = nextPage;
-
-      // Update infinite scroll observer to watch new last item
-      setupInfiniteScroll();
     } else {
       hasMorePages = false;
     }
@@ -313,6 +313,12 @@ async function loadNextPage() {
     hasMorePages = false;
   } finally {
     isLoadingPage = false;
+
+    // Update infinite scroll observer after loading flag is reset
+    // Use requestAnimationFrame to ensure DOM has settled
+    requestAnimationFrame(() => {
+      setupInfiniteScroll();
+    });
   }
 }
 
@@ -432,6 +438,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Setup infinite scroll
   setupInfiniteScroll();
+
+  // Fallback: Check scroll position periodically to catch edge cases
+  let scrollCheckTimeout;
+  window.addEventListener('scroll', () => {
+    clearTimeout(scrollCheckTimeout);
+    scrollCheckTimeout = setTimeout(() => {
+      const scrollHeight = document.documentElement.scrollHeight;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop;
+      const clientHeight = window.innerHeight;
+
+      // If within 1000px of bottom and not loading, trigger load
+      if (scrollHeight - scrollTop - clientHeight < 1000 && hasMorePages && !isLoadingPage) {
+        loadNextPage();
+      }
+    }, 100); // Debounce 100ms
+  }, { passive: true });
 });
 
 /**
