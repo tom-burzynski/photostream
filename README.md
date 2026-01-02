@@ -37,13 +37,6 @@ The layout engine is borrowed from [Tim Van Damme](https://codepen.io/maxvoltar/
 - Additional photos load automatically as you approach the bottom of the page (no pagination buttons needed)
 - Click any photo to view the full-size version with details
 
-**Month/Year Picker:**
-- Located in the upper-right corner of the page (fixed position, always visible)
-- Shows the current month/year in viewport as you scroll
-- Click to open dropdown and select any month/year to jump directly to that time period
-- Months are grouped by year with the most recent dates at the top
-- The currently visible month is highlighted in the dropdown
-
 **Site Information:**
 - Site title and description appear in the upper-left corner overlay
 - Footer links (if configured) appear at the bottom-right corner
