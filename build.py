@@ -696,7 +696,6 @@ class PreviewGenerator:
 class IndexPageContext:
     """Context data for rendering the index page."""
     photos_json: str
-    month_data: str = "[]"
     preload_images: List[Dict[str, Any]] = None
     preload_count: int = 20
     photos: List[Dict[str, Any]] = None
@@ -760,7 +759,6 @@ class TemplateRenderer:
                 photos=ctx.photos or [],
                 preload_images=ctx.preload_images or [],
                 preload_count=ctx.preload_count,
-                month_data=ctx.month_data,
                 title=ctx.title,
                 description=ctx.description,
                 footer=ctx.footer,
@@ -785,7 +783,6 @@ class TemplateRenderer:
                 .replace('{% if preload_images %}{% for img in preload_images %}<link rel="preload" as="image" href="{{ img.src }}" fetchpriority="high">\n{% endfor %}{% endif %}', '')
                 .replace('{{ photos_json | safe }}', '$photos_json')
                 .replace('{{ preload_count | default(20) }}', '$preload_count')
-                .replace('{{ month_data | safe }}', '$month_data')
                 .replace('{{ title }}', '$title')
                 .replace('{{ description }}', '$description')
                 .replace('{{ footer }}', '$footer')
@@ -800,7 +797,6 @@ class TemplateRenderer:
             return t.substitute(
                 photos_json=ctx.photos_json,
                 preload_count=ctx.preload_count,
-                month_data=ctx.month_data,
                 title=ctx.title,
                 description=ctx.description,
                 footer=ctx.footer,
@@ -899,33 +895,6 @@ class PhotoProcessor:
         formatted_datetime = f"{month} {day}, {year} at {display_hour}:{minute:02d}{ampm}"
         return f"[{formatted_datetime}]"
 
-    def _generate_month_data(self, meta: List[Dict[str, Any]], datetime_lookup: Dict[Path, dt.datetime]) -> List[Dict[str, Any]]:
-        """Generate month/year data for the date picker.
-        Returns list of months with first photo ID for scrolling, grouped by year.
-        Format: [{"year": 2025, "month": 1, "label": "January 2025", "photo_id": "ph-000001"}, ...]
-        """
-        month_map = {}  # (year, month) -> first photo id
-
-        for photo in meta:
-            original_path = Path(photo["original_path"])
-            photo_datetime = datetime_lookup.get(original_path)
-            if photo_datetime:
-                key = (photo_datetime.year, photo_datetime.month)
-                if key not in month_map:
-                    month_map[key] = photo["id"]
-
-        # Convert to sorted list (newest first, matching photo order)
-        month_list = []
-        for (year, month), photo_id in sorted(month_map.items(), reverse=True):
-            month_name = dt.datetime(year, month, 1).strftime("%B")
-            month_list.append({
-                "year": year,
-                "month": month,
-                "label": f"{month_name} {year}",
-                "photo_id": photo_id
-            })
-
-        return month_list
 
     def _process_one_image(self, idx: int, image_path: Path, originals_dir: Path, previews_dir: Path, photo_datetime: dt.datetime) -> Optional[Dict[str, Any]]:
         """Process a single image: convert to WebP, generate preview, extract metadata."""
@@ -1097,9 +1066,6 @@ class PhotoProcessor:
 
         print("Writing index and pages...", flush=True)
 
-        # Generate month/year data for date picker
-        month_data = self._generate_month_data(meta, datetime_lookup)
-
         # Generate paginated JSON data for infinite scroll
         data_dir = self.config.out_dir / "data"
         data_dir.mkdir(exist_ok=True)
@@ -1129,7 +1095,6 @@ class PhotoProcessor:
 
         index_ctx = IndexPageContext(
             photos_json=json.dumps(first_page_photos, ensure_ascii=False),
-            month_data=json.dumps(month_data, ensure_ascii=False),
             preload_images=preload_images,
             preload_count=self.config.preload_count,
             photos=first_page_photos,
