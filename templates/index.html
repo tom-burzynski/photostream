@@ -166,62 +166,6 @@
     pointer-events: none;
   }
 
-  /* Month/Year Picker - Fixed in upper right */
-  #month-picker {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 1000;
-  }
-
-  #month-select {
-    background: rgba(0, 0, 0, 0.85);
-    color: #fff;
-    border: 1px solid #444;
-    border-radius: 4px;
-    padding: 0.5rem 2rem 0.5rem 0.75rem;
-    font-size: 0.875rem;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.5rem center;
-    min-width: 10rem;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  #month-select:hover {
-    background: rgba(0, 0, 0, 0.95);
-    border-color: #666;
-  }
-
-  #month-select:focus {
-    outline: 2px solid #fff;
-    outline-offset: 2px;
-  }
-
-  /* Year group headers in dropdown */
-  #month-select optgroup {
-    background: #000;
-    color: #888;
-    font-weight: bold;
-    font-style: normal;
-  }
-
-  #month-select option {
-    background: #000;
-    color: #fff;
-    padding: 0.25rem 0.5rem;
-  }
-
-  /* Highlight current month in viewport */
-  #month-select option.current {
-    background: #333;
-    font-weight: bold;
-  }
-
   /* Mobile adjustments */
   @media (max-width: 640px) {
     #site-title {
@@ -237,25 +181,12 @@
       right: 0.5rem;
       font-size: 0.75rem;
     }
-    #month-picker {
-      top: 0.5rem;
-      right: 0.5rem;
-    }
-    #month-select {
-      font-size: 0.8125rem;
-      padding: 0.4rem 1.75rem 0.4rem 0.6rem;
-      min-width: 8rem;
-    }
   }
 </style>
 <body>
 <div id="site-title">
   {{ title }}
   {% if description %}<div id="site-description">{{ description }}</div>{% endif %}
-</div>
-<div id="month-picker">
-  <select id="month-select" aria-label="Jump to month">
-  </select>
 </div>
 {% if link1_title and link1_url or link2_title and link2_url or link3_title and link3_url or footer %}<div id="site-footer">{% if link1_title and link1_url %}<a href="{{ link1_url }}" target="_blank" rel="noopener noreferrer">{{ link1_title }}</a>{% endif %}{% if link1_title and link1_url and (link2_title and link2_url or link3_title and link3_url) %}<span class="separator">|</span>{% endif %}{% if link2_title and link2_url %}<a href="{{ link2_url }}" target="_blank" rel="noopener noreferrer">{{ link2_title }}</a>{% endif %}{% if link2_title and link2_url and link3_title and link3_url %}<span class="separator">|</span>{% endif %}{% if link3_title and link3_url %}<a href="{{ link3_url }}" target="_blank" rel="noopener noreferrer">{{ link3_title }}</a>{% endif %}{% if (link1_title and link1_url or link2_title and link2_url or link3_title and link3_url) and footer %}<span class="separator">|</span>{% endif %}{{ footer }}</div>{% endif %}
 <ul id="gallery">
@@ -268,17 +199,12 @@
 </ul>
 <script>
 let allPhotos = {{ photos_json | safe }};   // Initial page of photos
-const monthData = {{ month_data | safe }}; // [{year,month,label,photo_id}]
 let didInitialHashScroll = false;
 
 // Infinite scroll state
 let currentPage = 0;
 let isLoadingPage = false;
 let hasMorePages = true;
-
-// Month picker scroll state - prevent auto-update during programmatic scroll
-let isProgrammaticScroll = false;
-let programmaticScrollTimeout = null;
 
 // Load next page of photos
 async function loadNextPage() {
@@ -314,93 +240,6 @@ async function loadNextPage() {
   }
 }
 
-// Load a specific page by number (expects sequential page loading)
-async function loadSpecificPage(pageNum) {
-  if (pageNum <= currentPage) return true; // Already loaded
-
-  // Prevent duplicate requests
-  if (isLoadingPage) {
-    // Wait for current request to finish
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return loadSpecificPage(pageNum);
-  }
-
-  isLoadingPage = true;
-
-  try {
-    const response = await fetch(`./data/page_${pageNum}.json`);
-    if (!response.ok) {
-      // Page doesn't exist - we've reached the end
-      hasMorePages = false;
-      isLoadingPage = false;
-      return false;
-    }
-
-    const data = await response.json();
-    const newPhotos = data.photos;
-
-    if (newPhotos && newPhotos.length > 0) {
-      appendPhotosToGallery(newPhotos);
-      allPhotos = allPhotos.concat(newPhotos);
-      currentPage = pageNum;
-      hasMorePages = data.has_more;
-      isLoadingPage = false;
-      return true;
-    }
-
-    hasMorePages = false;
-    isLoadingPage = false;
-    return false;
-  } catch (error) {
-    console.error(`Error loading page ${pageNum}:`, error);
-    hasMorePages = false;
-    isLoadingPage = false;
-    return false;
-  }
-}
-
-// Load all pages up to and including the one containing a specific photo
-async function loadPagesUntilPhoto(photoId) {
-  // Check if photo is already loaded
-  if (allPhotos.some(p => p.id === photoId)) {
-    return true;
-  }
-
-  // Load pages sequentially until we find the photo
-  // We need to load pages in order (currentPage + 1, currentPage + 2, etc.)
-  const maxAttempts = 100; // Safety limit to prevent infinite loops
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    attempts++;
-
-    // Check if we've already found the photo (in case of race condition)
-    if (allPhotos.some(p => p.id === photoId)) {
-      return true;
-    }
-
-    // If no more pages available, we can't find it
-    if (!hasMorePages) {
-      console.warn(`Photo ${photoId} not found - no more pages available`);
-      return false;
-    }
-
-    const nextPage = currentPage + 1;
-    const success = await loadSpecificPage(nextPage);
-
-    if (!success) {
-      console.warn(`Failed to load page ${nextPage}`);
-      return false;
-    }
-
-    // Small delay to allow DOM updates to propagate
-    await new Promise(resolve => setTimeout(resolve, 10));
-  }
-
-  console.warn(`Photo ${photoId} not found after ${maxAttempts} attempts`);
-  return false;
-}
-
 // Append photos to the gallery DOM
 function appendPhotosToGallery(photos) {
   const gallery = document.getElementById('gallery');
@@ -408,19 +247,6 @@ function appendPhotosToGallery(photos) {
 
   photos.forEach(photo => {
     const li = document.createElement('li');
-
-    // Check if this photo is the first photo of a month and add an anchor marker inside the li
-    const monthEntry = monthData.find(m => m.photo_id === photo.id);
-    if (monthEntry) {
-      // Create invisible anchor marker for this month at the top of the li
-      const monthAnchor = document.createElement('span');
-      monthAnchor.id = `month-${photo.id}`;
-      monthAnchor.style.display = 'block';
-      monthAnchor.style.height = '0';
-      monthAnchor.style.width = '0';
-      monthAnchor.style.overflow = 'hidden';
-      li.appendChild(monthAnchor);
-    }
 
     const a = document.createElement('a');
     a.href = photo.page;
@@ -526,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
  * Handles lazy-loaded images by waiting for them to load before scrolling.
  * Cancels scroll if user manually scrolls during the process.
  */
-async function handleInitialHashScroll() {
+function handleInitialHashScroll() {
   const urlParams = new URLSearchParams(location.search);
   const hasPhotoParam = urlParams.has('photo');
   let targetId = null;
@@ -537,16 +363,7 @@ async function handleInitialHashScroll() {
 
   if (!targetId) return;
 
-  let el = document.getElementById(targetId);
-
-  // If element not found, try to load pages until we find it
-  if (!el) {
-    const loaded = await loadPagesUntilPhoto(targetId);
-    if (loaded) {
-      el = document.getElementById(targetId);
-    }
-  }
-
+  const el = document.getElementById(targetId);
   if (!el) return;
 
   const img = el.querySelector('img');
@@ -564,21 +381,11 @@ async function handleInitialHashScroll() {
   const scrollToTarget = () => {
     if (userHasScrolled) return; // Don't interrupt user's scroll
 
-    // Disable auto-update during programmatic scroll
-    isProgrammaticScroll = true;
-    if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
-
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (userHasScrolled) return; // Check again before scrolling
         el.scrollIntoView({ block: 'center' });
         setTimeout(() => el.blur(), 0);
-
-        // Re-enable auto-update after scroll completes
-        programmaticScrollTimeout = setTimeout(() => {
-          isProgrammaticScroll = false;
-          console.log('Initial hash scroll complete, re-enabling auto-update');
-        }, 1500);
       });
     });
   };
@@ -602,186 +409,6 @@ async function handleInitialHashScroll() {
   }
 }
 
-
-// Month/Year picker functionality
-function initMonthPicker() {
-  const select = document.getElementById('month-select');
-  if (!select || !monthData || monthData.length === 0) return;
-
-  // Group months by year
-  const yearGroups = {};
-  monthData.forEach(item => {
-    if (!yearGroups[item.year]) {
-      yearGroups[item.year] = [];
-    }
-    yearGroups[item.year].push(item);
-  });
-
-  // Populate select with optgroups by year
-  Object.keys(yearGroups).sort((a, b) => b - a).forEach(year => {
-    const optgroup = document.createElement('optgroup');
-    optgroup.label = year;
-
-    yearGroups[year].forEach(item => {
-      const option = document.createElement('option');
-      option.value = item.photo_id;
-      option.textContent = item.label;
-      option.dataset.year = item.year;
-      option.dataset.month = item.month;
-      optgroup.appendChild(option);
-    });
-
-    select.appendChild(optgroup);
-  });
-
-  // Set initial value to the first month (most recent)
-  if (monthData.length > 0) {
-    select.value = monthData[0].photo_id;
-  }
-
-  // Handle selection - scroll to selected month's first photo
-  select.addEventListener('change', async (e) => {
-    const photoId = e.target.value;
-    if (photoId) {
-      console.log(`Month picker: Looking for photo ${photoId}, currently on page ${currentPage}, hasMorePages=${hasMorePages}`);
-
-      // Update URL hash to persist selection across reloads
-      window.location.hash = photoId;
-
-      // First, load pages until we have the photo
-      const photoElement = document.getElementById(photoId);
-      if (!photoElement) {
-        console.log(`Photo ${photoId} not in DOM, loading pages...`);
-        const loaded = await loadPagesUntilPhoto(photoId);
-        console.log(`loadPagesUntilPhoto result: ${loaded}, currentPage now: ${currentPage}`);
-
-        if (!loaded) {
-          console.error(`Could not find photo ${photoId} even after loading pages`);
-          return;
-        }
-      }
-
-      // Now scroll to the month anchor marker (created when photo was appended)
-      const monthAnchorId = `month-${photoId}`;
-
-      // Wait for browser to complete layout calculations
-      // This ensures all newly added DOM elements have been positioned
-      await new Promise(resolve => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
-        });
-      });
-
-      const monthAnchor = document.getElementById(monthAnchorId);
-
-      if (monthAnchor) {
-        console.log(`Found month anchor, scrolling to ${monthAnchorId}`);
-
-        // Disable auto-update during programmatic scroll
-        isProgrammaticScroll = true;
-        if (programmaticScrollTimeout) clearTimeout(programmaticScrollTimeout);
-
-        // Scroll to the anchor
-        monthAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        console.log(`Scrolled to ${monthAnchorId}`);
-
-        // Re-enable auto-update after scroll completes (smooth scroll takes ~1000ms)
-        programmaticScrollTimeout = setTimeout(() => {
-          isProgrammaticScroll = false;
-          console.log('Programmatic scroll complete, re-enabling auto-update');
-        }, 1500);
-      } else {
-        console.error(`Could not find month anchor ${monthAnchorId}`);
-      }
-    }
-  });
-}
-
-// Cache photo index lookups for better performance
-let photoIndexMap = null;
-
-// Update current month display and highlighting based on viewport
-function updateCurrentMonthHighlight() {
-  // Skip update if we're in the middle of a programmatic scroll
-  if (isProgrammaticScroll) {
-    console.log('Skipping auto-update during programmatic scroll');
-    return;
-  }
-
-  const select = document.getElementById('month-select');
-  if (!select || !monthData || monthData.length === 0) return;
-
-  // Build index map once (rebuild when photos added)
-  if (!photoIndexMap || photoIndexMap.size !== allPhotos.length) {
-    photoIndexMap = new Map(allPhotos.map((p, i) => [p.id, i]));
-  }
-
-  // Find the first photo currently visible near the top of the viewport
-  const viewportTop = window.scrollY;
-  const viewportMiddle = viewportTop + (window.innerHeight / 3);
-
-  let currentPhotoId = null;
-  let minDistance = Infinity;
-
-  // Find the photo closest to the top third of viewport
-  for (let i = 0; i < allPhotos.length; i++) {
-    const photoEl = document.getElementById(allPhotos[i].id);
-    if (!photoEl) continue;
-
-    const rect = photoEl.getBoundingClientRect();
-    const elemTop = rect.top + window.scrollY;
-    const elemBottom = elemTop + rect.height;
-
-    if (elemBottom >= viewportTop && elemTop <= viewportTop + window.innerHeight) {
-      const distance = Math.abs(elemTop - viewportMiddle);
-      if (distance < minDistance) {
-        minDistance = distance;
-        currentPhotoId = allPhotos[i].id;
-      }
-    }
-  }
-
-  if (!currentPhotoId) return;
-
-  const photoIndex = photoIndexMap.get(currentPhotoId);
-
-  // Find which month this photo belongs to
-  for (let i = 0; i < monthData.length; i++) {
-    const item = monthData[i];
-    const monthPhotoIndex = photoIndexMap.get(item.photo_id);
-
-    if (monthPhotoIndex <= photoIndex) {
-      const nextItem = monthData[i + 1];
-      if (!nextItem || photoIndexMap.get(nextItem.photo_id) > photoIndex) {
-        if (select.value !== item.photo_id) {
-          select.value = item.photo_id;
-        }
-        break;
-      }
-    }
-  }
-}
-
-// Debounced scroll handler for current month highlighting
-let scrollUpdateTimer = null;
-function scheduleMonthUpdate() {
-  if (scrollUpdateTimer !== null) return;
-  scrollUpdateTimer = setTimeout(() => {
-    scrollUpdateTimer = null;
-    updateCurrentMonthHighlight();
-  }, 200);
-}
-
-window.addEventListener('load', () => {
-  initMonthPicker();
-  updateCurrentMonthHighlight(); // Initialize with current month on load
-});
-// Monitor scroll for month picker updates
-window.addEventListener('scroll', () => {
-  scheduleMonthUpdate();
-}, { passive: true });
 
 // Photo overlay functionality - ensure overlay elements exist before running
 function initPhotoOverlay() {
