@@ -1129,8 +1129,9 @@ class PhotoProcessor:
         # Write per-photo pages
         n = len(meta)
         for i, m in enumerate(meta):
-            prev_idx = (i - 1) % n  # wrap-around
-            next_idx = (i + 1) % n
+            # No wrap-around: stop at boundaries
+            prev_idx = max(0, i - 1)  # stay at first photo
+            next_idx = min(n - 1, i + 1)  # stay at last photo
 
             # Look up the datetime for this photo and format the title
             original_path = Path(m["original_path"])
