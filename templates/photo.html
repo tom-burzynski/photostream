@@ -45,6 +45,11 @@
     right: 2rem;
   }
 
+  /* Hide chevrons when at boundaries (no navigation possible) */
+  .nav-zone[data-at-boundary="true"]::after {
+    display: none;
+  }
+
   /* Show chevrons on hover and focus - ONLY on devices with hover capability */
   @media (hover: hover) and (pointer: fine) {
     .nav-left:hover::after,
@@ -293,6 +298,19 @@ if (!document.startViewTransition) {
 
   if (!centerDiv || !img || !navZones.length) return;
 
+  // Detect and mark boundary zones (where navigation should be disabled)
+  const currentPhotoId = '{{ anchor_id }}';
+  navZones.forEach(zone => {
+    const targetPhotoId = zone.dataset.photoId;
+    // If target photo ID matches current photo ID, we're at a boundary
+    if (targetPhotoId === currentPhotoId) {
+      zone.setAttribute('data-at-boundary', 'true');
+      zone.style.cursor = 'default';
+      zone.removeAttribute('role');
+      zone.removeAttribute('tabindex');
+    }
+  });
+
   // Detect if touch device
   const isTouchDevice = 'ontouchstart' in window;
 
@@ -308,7 +326,12 @@ if (!document.startViewTransition) {
   const DRAG_FACTOR = 0.4;
 
   // Helper to set slide direction and navigate
-  function navigate(url, navType, photoId) {
+  function navigate(url, navType, photoId, zone) {
+    // Don't navigate if we're at a boundary
+    if (zone && zone.getAttribute('data-at-boundary') === 'true') {
+      return;
+    }
+
     // Check if we're in an iframe (overlay mode)
     const isInOverlay = window.self !== window.top;
 
@@ -338,7 +361,7 @@ if (!document.startViewTransition) {
         const navType = zone.dataset.nav;
         const photoId = zone.dataset.photoId;
         if (url) {
-          navigate(url, navType, photoId);
+          navigate(url, navType, photoId, zone);
         }
       }
     });
@@ -352,7 +375,7 @@ if (!document.startViewTransition) {
         const navType = zone.dataset.nav;
         const photoId = zone.dataset.photoId;
         if (url) {
-          navigate(url, navType, photoId);
+          navigate(url, navType, photoId, zone);
         }
       });
     });
@@ -414,13 +437,13 @@ if (!document.startViewTransition) {
           const zone = document.querySelector('.nav-left');
           const url = zone.dataset.url;
           const photoId = zone.dataset.photoId;
-          if (url) navigate(url, 'prev', photoId);
+          if (url) navigate(url, 'prev', photoId, zone);
         } else {
           // Swipe left - next photo
           const zone = document.querySelector('.nav-right');
           const url = zone.dataset.url;
           const photoId = zone.dataset.photoId;
-          if (url) navigate(url, 'next', photoId);
+          if (url) navigate(url, 'next', photoId, zone);
         }
       }
       // Check if it's a tap (minimal movement)
@@ -435,7 +458,7 @@ if (!document.startViewTransition) {
           const navType = zone.dataset.nav;
           const photoId = zone.dataset.photoId;
           if (url) {
-            navigate(url, navType, photoId);
+            navigate(url, navType, photoId, zone);
           }
         }
       }
