@@ -580,9 +580,10 @@ class PreviewGenerator:
         except Exception:
             return str(abs(hash(src)) & 0xffffffff)
     
-    def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None) -> Tuple[Path, int, int, Dict[str, str]]:
+    def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None) -> Optional[Tuple[Path, int, int, Dict[str, str]]]:
         """Create or reuse a WebP preview for `src` under `previews_dir`.
         Returns (preview_path, width, height, colors) with colors dict containing bg_color, accent_color, text_color.
+        Returns None if preview generation fails, so the caller can skip the photo rather than serving the original (un-stripped) file.
         """
         # Get original dimensions (potentially cached)
         if image_metadata:
@@ -639,8 +640,9 @@ class PreviewGenerator:
                     self.cache.set_colors(src, colors)
                     
         except Exception:
-            # Fall back to original path if anything goes wrong
-            return (src, w, h, colors)
+            # Do NOT fall back to the original file: it would leak EXIF/GPS
+            # metadata in the grid. Signal failure so the caller skips the photo.
+            return None
         return (out, w, h, colors)
     
     def convert_to_webp(self, src: Path, dst: Path) -> bool:
@@ -915,9 +917,14 @@ class PhotoProcessor:
             rel_src_full = PreviewGenerator.rel_to_out(dst_full, self.config.out_dir)
 
             # Generate / reuse preview (WebP) and get original dimensions + colors
-            preview_path, w_meta, h_meta, colors = self.preview_generator.generate_preview(
+            result = self.preview_generator.generate_preview(
                 image_path, previews_dir, self.image_metadata
             )
+            if result is None:
+                # Preview generation failed; skip this photo rather than
+                # serving the original (un-stripped) file in the grid.
+                return None
+            preview_path, w_meta, h_meta, colors = result
             rel_src_preview = PreviewGenerator.rel_to_out(preview_path, self.config.out_dir)
 
             # Use original image dimensions if available

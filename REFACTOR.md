@@ -117,9 +117,10 @@ Checklist of fixes to apply. Each item references the finding above.
       that file, apply its values as argparse defaults via `set_defaults` so
       custom config files are honored and CLI flags override them.
       (`build.py:1300-1380`)
-- [ ] **#2** Stop privacy leak on preview failure. Make `generate_preview` return
-      `None` (skip photo) or a safe placeholder instead of the original `src`.
-      (`build.py:641-643`, `build.py:901-948`)
+- [x] **#2** Stop privacy leak on preview failure. `generate_preview` now returns
+      `None` on failure instead of the original `src`; `_process_one_image`
+      skips the photo in that case. (`build.py:583`, `build.py:641-643`,
+      `build.py:917-921`)
 - [ ] **#3** Fix or remove the non-Jinja2 fallback. Define `PHOTO_TMPL` or delete
       the dead fallback branches in `render_photo` / `render_index`.
       (`build.py:834-851`, `build.py:784-811`)
