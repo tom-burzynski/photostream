@@ -136,9 +136,9 @@ Checklist of fixes to apply. Each item references the finding above.
 - [x] **#7** Decode each source image once. `convert_to_webp` and `generate_preview`
       accept a reused in-memory image opened+transposed once in `_process_one_image`.
       (`build.py:583`, `build.py:648`, `build.py:835-856`)
-- [ ] **#8** Log skipped photos. Replace the silent `return None` in
-      `_process_one_image` with a logged warning including filename + exception.
-      (`build.py:946-948`)
+- [x] **#8** Log skipped photos. `_process_one_image` now warns (to stderr) with
+      the filename for conversion failure, preview failure, and any unexpected
+      exception. (`build.py:873`, `build.py:886`, `build.py:916`)
 - [x] **#9** Move `slugify` to a module-level function; updated `PreviewGenerator`
       callers. (`build.py:48`, `build.py:492`, `build.py:603`)
 - [ ] **#10** Make datetime/dimensions/gps caches content-based (like the preview

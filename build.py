@@ -870,6 +870,7 @@ class PhotoProcessor:
             dst_full = (originals_dir / rel_under_src).with_suffix(".webp")
             if not self.preview_generator.convert_to_webp(image_path, dst_full, im=im):
                 im.close()
+                print(f"Warning: Skipping {image_path.name}: full-size WebP conversion failed", file=sys.stderr)
                 return None
 
             rel_src_full = PreviewGenerator.rel_to_out(dst_full, self.config.out_dir)
@@ -882,6 +883,7 @@ class PhotoProcessor:
             if result is None:
                 # Preview generation failed; skip this photo rather than
                 # serving the original (un-stripped) file in the grid.
+                print(f"Warning: Skipping {image_path.name}: preview generation failed", file=sys.stderr)
                 return None
             preview_path, w_meta, h_meta, colors = result
             rel_src_preview = PreviewGenerator.rel_to_out(preview_path, self.config.out_dir)
@@ -909,8 +911,9 @@ class PhotoProcessor:
                 "text_color": colors.get("text_color", "#ffffff"),
                 "original_path": str(image_path),  # Store original path for datetime lookup
             }
-        except Exception:
+        except Exception as e:
             # Skip this image to avoid referencing originals that may contain metadata
+            print(f"Warning: Skipping {image_path.name}: {e}", file=sys.stderr)
             return None
 
     def _geocode_images(self, meta: List[Dict[str, Any]]) -> None:
