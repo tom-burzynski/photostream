@@ -133,9 +133,9 @@ Checklist of fixes to apply. Each item references the finding above.
       (`build.py:54`, `build.py:634`)
 - [x] **#6** Remove the unnecessary `im.copy()` in `strip_all_metadata`; pop
       `im.info` keys in place. (`build.py:495-505`)
-- [ ] **#7** Decode each source image once. Reuse the converted full WebP (or a
-      single decode) for preview generation + color extraction.
-      (`build.py:912`, `build.py:918`)
+- [x] **#7** Decode each source image once. `convert_to_webp` and `generate_preview`
+      accept a reused in-memory image opened+transposed once in `_process_one_image`.
+      (`build.py:583`, `build.py:648`, `build.py:835-856`)
 - [ ] **#8** Log skipped photos. Replace the silent `return None` in
       `_process_one_image` with a logged warning including filename + exception.
       (`build.py:946-948`)

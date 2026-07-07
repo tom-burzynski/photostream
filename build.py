@@ -580,46 +580,54 @@ class PreviewGenerator:
         except Exception:
             return str(abs(hash(src)) & 0xffffffff)
     
-    def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None) -> Optional[Tuple[Path, int, int, Dict[str, str]]]:
+    def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None, im: Optional[Image.Image] = None) -> Optional[Tuple[Path, int, int, Dict[str, str]]]:
         """Create or reuse a WebP preview for `src` under `previews_dir`.
-        Returns (preview_path, width, height, colors) with colors dict containing bg_color, accent_color, text_color.
-        Returns None if preview generation fails, so the caller can skip the photo rather than serving the original (un-stripped) file.
+
+        If `im` is supplied (an already opened + EXIF-transposed image), it is
+        reused so the source file is decoded only once per photo. Otherwise the
+        source is opened here.
+
+        Returns (preview_path, width, height, colors) with colors dict containing
+        bg_color, accent_color, text_color. Returns None if preview generation
+        fails, so the caller can skip the photo rather than serving the original
+        (un-stripped) file.
         """
-        # Get original dimensions (potentially cached)
-        if image_metadata:
-            w, h = image_metadata.get_image_dimensions(src)
-        else:
-            w, h = (1, 1)
-            try:
-                with Image.open(src) as im:
-                    w, h = im.size
-            except Exception:
-                pass
-        
-        # Use content-based hash for better cache invalidation
-        content_hash = self._get_content_hash(src)
-
-        # Determine output path with content hash (no height in filename to keep it simple)
-        base = f"{slugify(src.stem)}-{content_hash}"
-        out = previews_dir / f"{base}.webp"
-
-        # Check cache - only regenerate if source changed (content_hash differs)
-        if self.cache:
-            cached_hash = self.cache.get_preview_hash(src)
-            cached_colors = self.cache.get_colors(src)
-            if cached_hash == content_hash and cached_colors and out.exists():
-                # Cache hit and file exists - reuse it
-                return (out, w, h, cached_colors)
-        
-        # Generate preview and extract colors
-        colors = {"bg_color": "#000000", "accent_color": "#333333", "text_color": "#ffffff"}
+        opened = im is None
         try:
-            with Image.open(src) as im:
+            if im is None:
+                try:
+                    im = Image.open(src)
+                    im = ImageOps.exif_transpose(im)
+                except Exception:
+                    return None
+
+            # Dimensions come straight from the (already decoded) image.
+            w, h = im.size
+
+            # Use content-based hash for better cache invalidation
+            content_hash = self._get_content_hash(src)
+
+            # Determine output path with content hash (no height in filename to keep it simple)
+            base = f"{slugify(src.stem)}-{content_hash}"
+            out = previews_dir / f"{base}.webp"
+
+            # Check cache - only regenerate if source changed (content_hash differs)
+            if self.cache:
+                cached_hash = self.cache.get_preview_hash(src)
+                cached_colors = self.cache.get_colors(src)
+                if cached_hash == content_hash and cached_colors and out.exists():
+                    # Cache hit and file exists - reuse it
+                    return (out, w, h, cached_colors)
+
+            # Generate preview and extract colors
+            colors = {"bg_color": "#000000", "accent_color": "#333333", "text_color": "#ffffff"}
+            try:
+                # exif_transpose is idempotent; safe if the caller already applied it.
                 im = ImageOps.exif_transpose(im)
-                
-                # Extract colors from original image before resizing
+
+                # Extract colors from the image before resizing
                 colors = self.extract_colors(im)
-                
+
                 pw, ph = im.size
                 # Scale based on height for consistent gallery loading
                 scale = min(1.0, self.config.max_preview_height / float(ph)) if self.config.max_preview_height > 0 else 1.0
@@ -638,41 +646,57 @@ class PreviewGenerator:
                 if self.cache:
                     self.cache.set_preview_hash(src, content_hash)
                     self.cache.set_colors(src, colors)
-                    
-        except Exception:
-            # Do NOT fall back to the original file: it would leak EXIF/GPS
-            # metadata in the grid. Signal failure so the caller skips the photo.
-            return None
-        return (out, w, h, colors)
-    
-    def convert_to_webp(self, src: Path, dst: Path) -> bool:
-        """Convert image to WebP format with metadata stripped."""
-        try:
-            needs = (not dst.exists()) or (dst.stat().st_mtime < src.stat().st_mtime)
-        except Exception:
-            needs = True
 
-        if needs:
+            except Exception:
+                # Do NOT fall back to the original file: it would leak EXIF/GPS
+                # metadata in the grid. Signal failure so the caller skips the photo.
+                return None
+            return (out, w, h, colors)
+        finally:
+            if opened and im is not None:
+                im.close()
+    
+    def convert_to_webp(self, src: Path, dst: Path, im: Optional[Image.Image] = None) -> bool:
+        """Convert image to WebP format with metadata stripped.
+
+        If `im` is supplied (already opened + EXIF-transposed), it is reused so
+        the source file is decoded only once per photo. Otherwise the source is
+        opened here.
+        """
+        opened = im is None
+        try:
             try:
-                with Image.open(src) as im:
-                    im = ImageOps.exif_transpose(im)
-                    if im.mode not in ("RGB", "L"):
-                        im = im.convert("RGB")
-                    # Strip all metadata so the WebP contains no identifying data
-                    im = self.strip_all_metadata(im)
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    im.save(dst, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD)
-                return True
-            except Exception as e:
-                # If conversion fails, remove any partial/empty file and do not leak the original with metadata
-                if dst.exists():
+                needs = (not dst.exists()) or (dst.stat().st_mtime < src.stat().st_mtime)
+            except Exception:
+                needs = True
+
+            if needs:
+                if opened:
                     try:
-                        dst.unlink()
-                    except Exception:
-                        pass
-                print(f"Warning: Failed to convert {src.name} to WebP: {e}", file=sys.stderr)
-                return False
-        return True
+                        im = Image.open(src)
+                        im = ImageOps.exif_transpose(im)
+                    except Exception as e:
+                        print(f"Warning: Failed to open {src.name}: {e}", file=sys.stderr)
+                        return False
+                if im.mode not in ("RGB", "L"):
+                    im = im.convert("RGB")
+                # Strip all metadata so the WebP contains no identifying data
+                im = self.strip_all_metadata(im)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                im.save(dst, format="WEBP", quality=WEBP_QUALITY, method=WEBP_METHOD)
+            return True
+        except Exception as e:
+            # If conversion fails, remove any partial/empty file and do not leak the original with metadata
+            if dst.exists():
+                try:
+                    dst.unlink()
+                except Exception:
+                    pass
+            print(f"Warning: Failed to convert {src.name} to WebP: {e}", file=sys.stderr)
+            return False
+        finally:
+            if opened and im is not None:
+                im.close()
 
     def copy_favicon(self, out_dir: Path) -> None:
         """Copy favicon.svg (sibling to this script) into the site output folder.
@@ -832,17 +856,29 @@ class PhotoProcessor:
             except Exception:
                 rel_under_src = Path(image_path.name)
 
+            # Open and normalize orientation once; reuse the decoded image for
+            # both the full WebP and the preview so the source is read a single time.
+            try:
+                im = Image.open(image_path)
+                im = ImageOps.exif_transpose(im)
+                if im.mode not in ("RGB", "L"):
+                    im = im.convert("RGB")
+            except Exception:
+                return None
+
             # Convert full-size to WebP inside originals/
             dst_full = (originals_dir / rel_under_src).with_suffix(".webp")
-            if not self.preview_generator.convert_to_webp(image_path, dst_full):
+            if not self.preview_generator.convert_to_webp(image_path, dst_full, im=im):
+                im.close()
                 return None
 
             rel_src_full = PreviewGenerator.rel_to_out(dst_full, self.config.out_dir)
 
-            # Generate / reuse preview (WebP) and get original dimensions + colors
+            # Generate / reuse preview (WebP) and get dimensions + colors
             result = self.preview_generator.generate_preview(
-                image_path, previews_dir, self.image_metadata
+                image_path, previews_dir, self.image_metadata, im=im
             )
+            im.close()
             if result is None:
                 # Preview generation failed; skip this photo rather than
                 # serving the original (un-stripped) file in the grid.
