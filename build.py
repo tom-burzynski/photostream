@@ -1298,70 +1298,85 @@ def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
 
 
 def parse_args():
-    """Parse command line arguments with config file support."""
-    # Load config file defaults first
-    config_defaults = load_config_file()
+    """Parse command line arguments with config file support.
+
+    The config file path is resolved first (via a pre-parser) so a custom
+    ``--config`` is honored. Its values become argparse defaults; any flag
+    passed on the command line overrides the corresponding config value.
+    """
+    # First pass: only resolve the config file path so a custom --config wins.
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config", type=Path, default=Path("config.ini"))
+    pre_args, _ = pre_parser.parse_known_args()
+    config_defaults = load_config_file(pre_args.config)
 
     ap = argparse.ArgumentParser(
         description="Generate a justified photo gallery with per-photo pages (newest first)."
     )
-    ap.add_argument("folder", nargs="?", type=Path, default=config_defaults["folder"],
+    ap.add_argument("folder", nargs="?", type=Path,
                     help="Folder containing photos (scanned recursively).")
     ap.add_argument("--config", type=Path, default=Path("config.ini"),
                     help="Path to configuration file (default: config.ini).")
-    ap.add_argument("--out-dir", type=Path, default=config_defaults["out_dir"],
+    ap.add_argument("--out-dir", type=Path,
                     help="Directory to write index.html, previews/, and view/. Defaults to current working directory.")
-    ap.add_argument("--workers", type=int, default=config_defaults["workers"],
+    ap.add_argument("--workers", type=int,
                     help="Number of worker threads to use for image processing (default: number of CPU cores).")
-    ap.add_argument("--template-dir", type=Path, default=config_defaults["template_dir"],
+    ap.add_argument("--template-dir", type=Path,
                     help="Directory containing custom templates (index.html, photo.html). Defaults to ./templates/")
-    ap.add_argument("--preview-height", type=int, default=config_defaults["preview_height"],
+    ap.add_argument("--preview-height", type=int,
                     help=f"Maximum height for preview images in pixels (default: {config_defaults['preview_height']}). Lower values reduce file sizes and improve loading speed.")
-    ap.add_argument("--preload-count", type=int, default=config_defaults["preload_count"],
+    ap.add_argument("--preload-count", type=int,
                     help=f"Number of first images to preload for LCP optimization (default: {config_defaults['preload_count']}). Higher values may slow initial page load.")
-    ap.add_argument("--page-size", type=int, default=config_defaults["page_size"],
+    ap.add_argument("--page-size", type=int,
                     help=f"Number of photos to load per page for infinite scroll (default: {config_defaults['page_size']}).")
-    ap.add_argument("--rename", action="store_true", default=config_defaults["rename"],
+    ap.add_argument("--rename", action="store_true",
                     help="Rename image files based on EXIF datetime (format: YYYY-MM-DD-HH-MM-SS.ext) before processing.")
-    ap.add_argument("--title", type=str, default=config_defaults["title"],
+    ap.add_argument("--title", type=str,
                     help=f"Title for the gallery site (default: '{config_defaults['title']}').")
-    ap.add_argument("--description", type=str, default=config_defaults["description"],
+    ap.add_argument("--description", type=str,
                     help="Description text to display under the title (default: empty).")
-    ap.add_argument("--footer", type=str, default=config_defaults["footer"],
+    ap.add_argument("--footer", type=str,
                     help="Footer text to display at bottom-right of the page (default: empty).")
-    ap.add_argument("--link1-title", type=str, default=config_defaults["link1_title"],
-                    help="Title for first footer link (default: empty).")
-    ap.add_argument("--link1-url", type=str, default=config_defaults["link1_url"],
-                    help="URL for first footer link (default: empty).")
-    ap.add_argument("--link2-title", type=str, default=config_defaults["link2_title"],
-                    help="Title for second footer link (default: empty).")
-    ap.add_argument("--link2-url", type=str, default=config_defaults["link2_url"],
-                    help="URL for second footer link (default: empty).")
-    ap.add_argument("--link3-title", type=str, default=config_defaults["link3_title"],
-                    help="Title for third footer link (default: empty).")
-    ap.add_argument("--link3-url", type=str, default=config_defaults["link3_url"],
-                    help="URL for third footer link (default: empty).")
-    ap.add_argument("--geocode", action="store_true", default=config_defaults["geocode"],
+    ap.add_argument("--link1-title", type=str, help="Title for first footer link (default: empty).")
+    ap.add_argument("--link1-url", type=str, help="URL for first footer link (default: empty).")
+    ap.add_argument("--link2-title", type=str, help="Title for second footer link (default: empty).")
+    ap.add_argument("--link2-url", type=str, help="URL for second footer link (default: empty).")
+    ap.add_argument("--link3-title", type=str, help="Title for third footer link (default: empty).")
+    ap.add_argument("--link3-url", type=str, help="URL for third footer link (default: empty).")
+    ap.add_argument("--geocode", action="store_true",
                     help="Enable reverse geocoding to extract city names from GPS coordinates (requires internet connection).")
-    ap.add_argument("--regeocode", action="store_true", default=config_defaults["regeocode"],
+    ap.add_argument("--regeocode", action="store_true",
                     help="Force re-geocoding of all images, ignoring cached location data. Requires --geocode flag.")
     ap.add_argument("--deploy", action="store_true",
                     help="Deploy the gallery after building (requires deployment configuration in config.ini).")
-    ap.add_argument("--deploy-method", type=str, default=config_defaults["deployment_method"],
+    ap.add_argument("--deploy-method", type=str,
                     help="Deployment method: rsync, rclone, or robocopy (overrides config.ini).")
 
-    args = ap.parse_args()
+    # Config-file values act as defaults; CLI flags override them.
+    ap.set_defaults(
+        folder=config_defaults["folder"],
+        out_dir=config_defaults["out_dir"],
+        workers=config_defaults["workers"],
+        template_dir=config_defaults["template_dir"],
+        preview_height=config_defaults["preview_height"],
+        preload_count=config_defaults["preload_count"],
+        page_size=config_defaults["page_size"],
+        rename=config_defaults["rename"],
+        title=config_defaults["title"],
+        description=config_defaults["description"],
+        footer=config_defaults["footer"],
+        link1_title=config_defaults["link1_title"],
+        link1_url=config_defaults["link1_url"],
+        link2_title=config_defaults["link2_title"],
+        link2_url=config_defaults["link2_url"],
+        link3_title=config_defaults["link3_title"],
+        link3_url=config_defaults["link3_url"],
+        geocode=config_defaults["geocode"],
+        regeocode=config_defaults["regeocode"],
+        deploy_method=config_defaults["deployment_method"],
+    )
 
-    # Re-load config file if custom config path was specified
-    if args.config != Path("config.ini"):
-        config_defaults = load_config_file(args.config)
-        # Update args with config file values where command line didn't override
-        for key, value in config_defaults.items():
-            arg_key = key.replace("_", "-") if "-" in key else key
-            if not hasattr(args, key):
-                setattr(args, key, value)
-
-    return args
+    return ap.parse_args()
 
 
 def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any]) -> None:
