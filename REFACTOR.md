@@ -148,5 +148,6 @@ Checklist of fixes to apply. Each item references the finding above.
 - [x] **#11** Reconcile docs with code. Removed the "Month/Year Picker" section
       from `AGENTS.md` (feature is not present in `index.html`). `CLAUDE.md`
       had no such references. (`AGENTS.md:192-207`)
-- [ ] **#12** Add unit tests for pure functions: `slugify`, EXIF datetime parsing,
-      ID dedup, and the #4 time formatter.
+- [x] **#12** Add unit tests (`tests/test_build.py`, unittest) for `slugify`,
+      `_format_time`, EXIF `extract_datetime`, and the extracted
+      `_assign_unique_ids` dedup helper. (`build.py:53`, `build.py:1042`)

@@ -54,6 +54,20 @@ def slugify(text: str) -> str:
 slugify = lru_cache(maxsize=1000)(slugify)
 
 
+def _assign_unique_ids(meta: List[Dict[str, Any]]) -> None:
+    """Ensure every photo has a unique `id` by appending a counter to
+    duplicates (e.g. `ph-...`, `ph-...-1`, `ph-...-2`). Mutates `meta` in place.
+    """
+    id_counts: Dict[str, int] = {}
+    for m in meta:
+        original_id = m["id"]
+        if original_id in id_counts:
+            id_counts[original_id] += 1
+            m["id"] = f"{original_id}-{id_counts[original_id]}"
+        else:
+            id_counts[original_id] = 0
+
+
 # Default max height for grid preview images (in pixels) - width will be proportional
 DEFAULT_PREVIEW_HEIGHT = 400
 
@@ -1033,15 +1047,8 @@ class PhotoProcessor:
         # Drop any failed items (ensures we never link to unsanitized originals)
         meta = [m for m in meta if m is not None]
 
-        # Handle duplicate timestamp IDs by appending counter
-        id_counts: Dict[str, int] = {}
-        for m in meta:
-            original_id = m["id"]
-            if original_id in id_counts:
-                id_counts[original_id] += 1
-                m["id"] = f"{original_id}-{id_counts[original_id]}"
-            else:
-                id_counts[original_id] = 0
+        # Handle duplicate timestamp IDs by appending a counter
+        _assign_unique_ids(meta)
 
         # Extract GPS and geocode if enabled
         if self.config.geocode:
