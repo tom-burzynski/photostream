@@ -495,17 +495,16 @@ class PreviewGenerator:
     
     @staticmethod
     def strip_all_metadata(im: Image.Image) -> Image.Image:
-        """Return a copy of the image with EXIF/GPS/IPTC/XMP/ICC removed.
-        This avoids leaking identifying information in saved outputs.
+        """Strip EXIF/GPS/IPTC/XMP/ICC metadata from the image's info dict in
+        place, so saved outputs don't leak identifying information. Avoids a
+        full pixel copy just to drop metadata.
         """
-        im2 = im.copy()
-        # Common metadata keys Pillow may carry around in `info`
         for k in ("exif", "icc_profile", "XMP", "xml", "iptc", "photoshop", "APP1", "APP13"):
             try:
-                im2.info.pop(k, None)
+                im.info.pop(k, None)
             except Exception:
                 pass
-        return im2
+        return im
     
     @staticmethod
     def extract_colors(im: Image.Image) -> Dict[str, str]:

@@ -131,8 +131,8 @@ Checklist of fixes to apply. Each item references the finding above.
 - [x] **#5** Use constants for the preview save. Added `PREVIEW_WEBP_QUALITY` (80)
       and use `WEBP_METHOD` instead of hardcoded `6`.
       (`build.py:54`, `build.py:634`)
-- [ ] **#6** Remove the unnecessary `im.copy()` in `strip_all_metadata`; pop
-      `im.info` keys in place before saving. (`build.py:496-507`)
+- [x] **#6** Remove the unnecessary `im.copy()` in `strip_all_metadata`; pop
+      `im.info` keys in place. (`build.py:495-505`)
 - [ ] **#7** Decode each source image once. Reuse the converted full WebP (or a
       single decode) for preview generation + color extraction.
       (`build.py:912`, `build.py:918`)
