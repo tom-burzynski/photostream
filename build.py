@@ -51,6 +51,7 @@ DEFAULT_PREVIEW_HEIGHT = 400
 # WebP conversion quality settings
 WEBP_QUALITY = 90  # 0-100, higher is better quality but larger file size
 WEBP_METHOD = 6    # 0-6, higher is slower but better compression
+PREVIEW_WEBP_QUALITY = 80  # Lower than full-size; previews are downscaled anyway
 
 # Color extraction settings
 COLOR_BG_FACTOR = 0.3      # Multiplier for background darkness (30% of average)
@@ -632,7 +633,7 @@ class PreviewGenerator:
                 # Strip all metadata to avoid leaking EXIF/GPS/etc in previews
                 im = self.strip_all_metadata(im)
                 out.parent.mkdir(parents=True, exist_ok=True)
-                im.save(out, format="WEBP", quality=80, optimize=True, method=6)
+                im.save(out, format="WEBP", quality=PREVIEW_WEBP_QUALITY, optimize=True, method=WEBP_METHOD)
 
                 # Cache the hash and colors
                 if self.cache:

@@ -128,9 +128,9 @@ Checklist of fixes to apply. Each item references the finding above.
 - [x] **#4** Extract a single `_format_time(photo_datetime)` helper; reused by
       `_format_photo_title` and `build_gallery`. Removes the duplicated am/pm
       logic. (`build.py:802-819`, `build.py:1068-1071`)
-- [ ] **#5** Use constants for the preview save. Reference `WEBP_METHOD` and add a
-      `PREVIEW_WEBP_QUALITY` constant so the preview quality intent is explicit.
-      (`build.py:52-53`, `build.py:634`)
+- [x] **#5** Use constants for the preview save. Added `PREVIEW_WEBP_QUALITY` (80)
+      and use `WEBP_METHOD` instead of hardcoded `6`.
+      (`build.py:54`, `build.py:634`)
 - [ ] **#6** Remove the unnecessary `im.copy()` in `strip_all_metadata`; pop
       `im.info` keys in place before saving. (`build.py:496-507`)
 - [ ] **#7** Decode each source image once. Reuse the converted full WebP (or a
