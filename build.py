@@ -403,10 +403,19 @@ class ImageMetadata:
         return dimensions
     
     def _get_dimensions_uncached(self, image_path: Path) -> Tuple[int, int]:
-        """Extract dimensions without caching."""
+        """Extract display dimensions without decoding pixels.
+
+        Header-only: `Image.open` and `getexif` read metadata, not pixel data.
+        The size is adjusted for EXIF orientation so it matches the dimensions
+        `ImageOps.exif_transpose` would produce on the decode path (orientations
+        5/6/7/8 rotate 90/270 and swap width/height).
+        """
         try:
             with Image.open(image_path) as im:
-                return im.size
+                w, h = im.size
+                if im.getexif().get(0x0112, 1) in (5, 6, 7, 8):  # 90/270 rotations
+                    w, h = h, w
+                return (w, h)
         except Exception:
             return (1, 1)
 

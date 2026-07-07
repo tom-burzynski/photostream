@@ -140,6 +140,11 @@ Checklist of fixes to apply. Each item references the finding above.
       skip decoding unchanged images entirely — restoring pre-refactor incremental
       performance. `generate_preview` checks its cache before opening.
       (`build.py:888-927`, `build.py:621-682`)
+      Orientation fix: `_get_dimensions_uncached` is now EXIF-orientation aware
+      (swaps w/h for orientations 5/6/7/8) so the warm cache-hit path, which reads
+      dimensions via `get_image_dimensions`, agrees with the decode path (reads
+      `im.size` after `exif_transpose`). Prevents aspect-ratio flips for rotated
+      photos on incremental rebuilds. (`build.py:405-421`)
 - [x] **#8** Log skipped photos. `_process_one_image` now warns (to stderr) with
       the filename for conversion failure, preview failure, and any unexpected
       exception. (`build.py:873`, `build.py:886`, `build.py:916`)

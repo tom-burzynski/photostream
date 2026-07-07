@@ -92,5 +92,38 @@ class AssignUniqueIdsTests(unittest.TestCase):
         self.assertEqual([m["id"] for m in meta], ["a", "b"])
 
 
+class DimensionsTests(unittest.TestCase):
+    def _make_image(self, size, orientation=None):
+        from PIL import Image
+
+        d = tempfile.mkdtemp()
+        p = Path(d) / "img.jpg"
+        img = Image.new("RGB", size, (10, 20, 30))
+        if orientation is not None:
+            exif = Image.Exif()
+            exif[0x0112] = orientation
+            img.save(p, exif=exif.tobytes())
+        else:
+            img.save(p)
+        return p
+
+    def test_raw_dimensions_unchanged(self):
+        p = self._make_image((20, 40))
+        self.assertEqual(build.ImageMetadata().get_image_dimensions(p), (20, 40))
+
+    def test_orientation_1_unchanged(self):
+        p = self._make_image((20, 40), orientation=1)
+        self.assertEqual(build.ImageMetadata().get_image_dimensions(p), (20, 40))
+
+    def test_orientation_6_swaps(self):
+        # Orientation 6 rotates 90deg: display size is swapped (40x20).
+        p = self._make_image((20, 40), orientation=6)
+        self.assertEqual(build.ImageMetadata().get_image_dimensions(p), (40, 20))
+
+    def test_orientation_7_swaps(self):
+        p = self._make_image((20, 40), orientation=7)
+        self.assertEqual(build.ImageMetadata().get_image_dimensions(p), (40, 20))
+
+
 if __name__ == "__main__":
     unittest.main()
