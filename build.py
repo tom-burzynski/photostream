@@ -22,10 +22,10 @@ from typing import Optional, Dict, List, Tuple, Any
 from functools import lru_cache
 try:
     from jinja2 import Environment, DictLoader, select_autoescape
-    _HAS_JINJA2 = True
-except Exception:
-    from string import Template as _StrTemplate
-    _HAS_JINJA2 = False
+except ImportError:
+    raise SystemExit(
+        "Jinja2 is required to build the gallery. Install it with: pip install jinja2"
+    )
 
 # Optional HEIC/HEIF (iPhone) support
 try:
@@ -715,18 +715,15 @@ class IndexPageContext:
 
 
 class TemplateRenderer:
-    """Handles HTML template rendering with Jinja2 or string templates as fallback."""
+    """Handles HTML template rendering with Jinja2."""
 
     def __init__(self, template_dir: Optional[Path] = None):
-        self.has_jinja2 = _HAS_JINJA2
         self.template_dir = template_dir or self._get_default_template_dir()
         self.templates = self._load_templates()
-
-        if self.has_jinja2:
-            self._env = Environment(
-                loader=DictLoader(self.templates),
-                autoescape=select_autoescape(['html'])
-            )
+        self._env = Environment(
+            loader=DictLoader(self.templates),
+            autoescape=select_autoescape(['html'])
+        )
     
     def _get_default_template_dir(self) -> Path:
         """Get default template directory relative to script location."""
@@ -757,100 +754,25 @@ class TemplateRenderer:
     
     def render_index(self, ctx: IndexPageContext) -> str:
         """Render the main index page with photo grid."""
-        if self.has_jinja2:
-            return self._env.get_template('index.html').render(
-                photos_json=ctx.photos_json,
-                photos=ctx.photos or [],
-                preload_images=ctx.preload_images or [],
-                preload_count=ctx.preload_count,
-                title=ctx.title,
-                description=ctx.description,
-                footer=ctx.footer,
-                link1_title=ctx.link1_title,
-                link1_url=ctx.link1_url,
-                link2_title=ctx.link2_title,
-                link2_url=ctx.link2_url,
-                link3_title=ctx.link3_title,
-                link3_url=ctx.link3_url
-            )
-        else:
-            # DEPRECATED FALLBACK: Basic string.Template renderer (no Jinja2)
-            # WARNING: This fallback has significant limitations:
-            #   - No auto-escaping (potential XSS if user content is malicious)
-            #   - No preload optimization support
-            #   - No conditional logic or loops
-            #   - Fragile template string replacement
-            # RECOMMENDATION: Install Jinja2 (pip install jinja2) for full functionality
-            template_content = self.templates.get('index.html', '')
-            # Remove Jinja2-specific syntax for string template
-            template_content = (template_content
-                .replace('{% if preload_images %}{% for img in preload_images %}<link rel="preload" as="image" href="{{ img.src }}" fetchpriority="high">\n{% endfor %}{% endif %}', '')
-                .replace('{{ photos_json | safe }}', '$photos_json')
-                .replace('{{ preload_count | default(20) }}', '$preload_count')
-                .replace('{{ title }}', '$title')
-                .replace('{{ description }}', '$description')
-                .replace('{{ footer | safe }}', '$footer')
-                .replace('{{ link1_title | safe }}', '$link1_title')
-                .replace('{{ link1_url }}', '$link1_url')
-                .replace('{{ link2_title | safe }}', '$link2_title')
-                .replace('{{ link2_url }}', '$link2_url')
-                .replace('{{ link3_title | safe }}', '$link3_title')
-                .replace('{{ link3_url }}', '$link3_url')
-            )
-            t = _StrTemplate(template_content)
-            return t.substitute(
-                photos_json=ctx.photos_json,
-                preload_count=ctx.preload_count,
-                title=ctx.title,
-                description=ctx.description,
-                footer=ctx.footer,
-                link1_title=ctx.link1_title,
-                link1_url=ctx.link1_url,
-                link2_title=ctx.link2_title,
-                link2_url=ctx.link2_url,
-                link3_title=ctx.link3_title,
-                link3_url=ctx.link3_url
-            )
+        return self._env.get_template('index.html').render(
+            photos_json=ctx.photos_json,
+            photos=ctx.photos or [],
+            preload_images=ctx.preload_images or [],
+            preload_count=ctx.preload_count,
+            title=ctx.title,
+            description=ctx.description,
+            footer=ctx.footer,
+            link1_title=ctx.link1_title,
+            link1_url=ctx.link1_url,
+            link2_title=ctx.link2_title,
+            link2_url=ctx.link2_url,
+            link3_title=ctx.link3_title,
+            link3_url=ctx.link3_url
+        )
     
     def render_photo(self, **ctx) -> str:
         """Render individual photo page."""
-        if self.has_jinja2:
-            return self._env.get_template('photo.html').render(**ctx)
-        else:
-            mapping = {
-                'title': ctx.get('title', ''),
-                'prev_page': ctx.get('prev_page', ''),
-                'next_page': ctx.get('next_page', ''),
-                'prev_id': ctx.get('prev_id', ''),
-                'next_id': ctx.get('next_id', ''),
-                'anchor_id': ctx.get('anchor_id', ''),
-                'img_src': ctx.get('img_src', ''),
-                'preview_src': ctx.get('preview_src', ''),
-                'img_width': ctx.get('img_width', ''),
-                'img_height': ctx.get('img_height', ''),
-                'alt': ctx.get('alt', ''),
-                'bg_color': ctx.get('bg_color', '#000000'),
-                'accent_color': ctx.get('accent_color', '#333333'),
-                'text_color': ctx.get('text_color', '#ffffff'),
-            }
-            t = _StrTemplate(
-                PHOTO_TMPL
-                .replace('{{ title }}', '$title')
-                .replace('{{ prev_page }}', '$prev_page')
-                .replace('{{ next_page }}', '$next_page')
-                .replace('{{ prev_id }}', '$prev_id')
-                .replace('{{ next_id }}', '$next_id')
-                .replace('{{ anchor_id }}', '$anchor_id')
-                .replace('{{ img_src }}', '$img_src')
-                .replace('{{ preview_src }}', '$preview_src')
-                .replace('{{ img_width }}', '$img_width')
-                .replace('{{ img_height }}', '$img_height')
-                .replace('{{ alt }}', '$alt')
-                .replace('{{ bg_color }}', '$bg_color')
-                .replace('{{ accent_color }}', '$accent_color')
-                .replace('{{ text_color }}', '$text_color')
-            )
-            return t.substitute(**mapping)
+        return self._env.get_template('photo.html').render(**ctx)
 
 
 class PhotoProcessor:

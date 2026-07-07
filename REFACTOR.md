@@ -121,9 +121,10 @@ Checklist of fixes to apply. Each item references the finding above.
       `None` on failure instead of the original `src`; `_process_one_image`
       skips the photo in that case. (`build.py:583`, `build.py:641-643`,
       `build.py:917-921`)
-- [ ] **#3** Fix or remove the non-Jinja2 fallback. Define `PHOTO_TMPL` or delete
-      the dead fallback branches in `render_photo` / `render_index`.
-      (`build.py:834-851`, `build.py:784-811`)
+- [x] **#3** Remove the broken non-Jinja2 fallback. Jinja2 is now a hard
+      requirement (already in `requirements.txt`); `build.py` fails fast with a
+      clear message if it is missing. `TemplateRenderer` keeps only the Jinja2
+      path. (`build.py:23-28`, `build.py:717-735`, `build.py:758`, `build.py:815`)
 - [ ] **#4** Extract a single `_format_time(photo_datetime)` helper and replace the
       duplicated am/pm logic in `_format_photo_title` and `build_gallery`.
       (`build.py:878-898`, `build.py:1142-1152`)
