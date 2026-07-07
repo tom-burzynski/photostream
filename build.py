@@ -76,6 +76,17 @@ WEBP_QUALITY = 90  # 0-100, higher is better quality but larger file size
 WEBP_METHOD = 6    # 0-6, higher is slower but better compression
 PREVIEW_WEBP_QUALITY = 80  # Lower than full-size; previews are downscaled anyway
 
+
+def _read_version() -> str:
+    """Read the project version from the VERSION file (single source of truth)."""
+    try:
+        return Path(__file__).resolve().parent.joinpath("VERSION").read_text(encoding="utf-8").strip()
+    except Exception:
+        return "unknown"
+
+
+__version__ = _read_version()
+
 # Color extraction settings
 COLOR_BG_FACTOR = 0.3      # Multiplier for background darkness (30% of average)
 COLOR_ACCENT_FACTOR = 0.6  # Multiplier for accent color brightness (60% of average)

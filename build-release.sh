@@ -34,6 +34,25 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
+# Resolve repo root and the VERSION file (single source of truth)
+REPO_ROOT=$(git rev-parse --show-toplevel)
+VERSION_FILE="$REPO_ROOT/VERSION"
+
+# Read current version from the VERSION file
+if [ -f "$VERSION_FILE" ]; then
+    CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
+else
+    CURRENT_VERSION="0.0.0"
+fi
+
+# Default next version = patch bump of the current version
+if [[ $CURRENT_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    DEFAULT_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+else
+    DEFAULT_VERSION="$CURRENT_VERSION"
+fi
+print_info "Current version: $CURRENT_VERSION"
+
 # Check for uncommitted changes
 if ! git diff-index --quiet HEAD -- 2>/dev/null; then
     print_warning "You have uncommitted changes:"
@@ -61,10 +80,15 @@ echo "              Photostream Release Builder"
 echo "════════════════════════════════════════════════════════════"
 echo ""
 
-# Prompt for version number
+# Prompt for version number (defaults to a patch bump of the current version)
 while true; do
-    echo -e "${BLUE}Enter version number (e.g., 1.0.0):${NC}"
+    echo -e "${BLUE}Enter version number (e.g., 1.0.0) [default: $DEFAULT_VERSION]:${NC}"
     read -r VERSION
+
+    # Empty input accepts the default (patch bump)
+    if [ -z "$VERSION" ]; then
+        VERSION="$DEFAULT_VERSION"
+    fi
 
     # Validate version format (basic semver)
     if [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -133,6 +157,16 @@ fi
 
 echo ""
 print_info "Creating release..."
+
+# Update the VERSION file (single source of truth) and commit the bump
+echo "$VERSION" > "$VERSION_FILE"
+git add "$VERSION_FILE"
+if git commit -m "Bump version to $VERSION"; then
+    print_success "Version file updated to $VERSION"
+else
+    print_error "Failed to commit version bump"
+    exit 1
+fi
 
 # Create annotated tag
 if git tag -a "$TAG" -m "$RELEASE_MESSAGE"; then
