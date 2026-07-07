@@ -145,7 +145,8 @@ Checklist of fixes to apply. Each item references the finding above.
       now includes a content signature (size + first 4KB) instead of `mtime`,
       avoiding stale hits when bytes change within 1s mtime resolution.
       (`build.py:96-114`)
-- [ ] **#11** Reconcile docs with code: remove/adjust the "month/year picker"
-      descriptions in `CLAUDE.md` / `AGENTS.md` that no longer match `index.html`.
+- [x] **#11** Reconcile docs with code. Removed the "Month/Year Picker" section
+      from `AGENTS.md` (feature is not present in `index.html`). `CLAUDE.md`
+      had no such references. (`AGENTS.md:192-207`)
 - [ ] **#12** Add unit tests for pure functions: `slugify`, EXIF datetime parsing,
       ID dedup, and the #4 time formatter.
