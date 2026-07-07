@@ -135,14 +135,18 @@ Checklist of fixes to apply. Each item references the finding above.
       `im.info` keys in place. (`build.py:495-505`)
 - [x] **#7** Decode each source image once. `convert_to_webp` and `generate_preview`
       accept a reused in-memory image opened+transposed once in `_process_one_image`.
-      (`build.py:583`, `build.py:648`, `build.py:835-856`)
+      Follow-up: decoding is now gated on actual work (`convert_needed` / preview
+      cache hit), so warm incremental rebuilds (the Docker file-watcher workflow)
+      skip decoding unchanged images entirely — restoring pre-refactor incremental
+      performance. `generate_preview` checks its cache before opening.
+      (`build.py:888-927`, `build.py:621-682`)
 - [x] **#8** Log skipped photos. `_process_one_image` now warns (to stderr) with
       the filename for conversion failure, preview failure, and any unexpected
       exception. (`build.py:873`, `build.py:886`, `build.py:916`)
 - [x] **#9** Move `slugify` to a module-level function; updated `PreviewGenerator`
       callers. (`build.py:48`, `build.py:492`, `build.py:603`)
 - [x] **#10** Make datetime/dimensions/gps caches content-based. `_get_cache_key`
-      now includes a content signature (size + first 4KB) instead of `mtime`,
+      now includes a content signature (size + first 1KB) instead of `mtime`,
       avoiding stale hits when bytes change within 1s mtime resolution.
       (`build.py:96-114`)
 - [x] **#11** Reconcile docs with code. Removed the "Month/Year Picker" section
