@@ -139,8 +139,8 @@ Checklist of fixes to apply. Each item references the finding above.
 - [ ] **#8** Log skipped photos. Replace the silent `return None` in
       `_process_one_image` with a logged warning including filename + exception.
       (`build.py:946-948`)
-- [ ] **#9** Move `slugify` to a module-level function; update `PreviewGenerator`
-      callers. (`build.py:198`, `build.py:491`, `build.py:602`)
+- [x] **#9** Move `slugify` to a module-level function; updated `PreviewGenerator`
+      callers. (`build.py:48`, `build.py:492`, `build.py:603`)
 - [ ] **#10** Make datetime/dimensions/gps caches content-based (like the preview
       hash) to avoid `st_mtime` staleness on 1s-resolution filesystems.
       (`build.py:101`)

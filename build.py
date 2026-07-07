@@ -45,6 +45,15 @@ PREF_DT_TAGS = [
     EXIF_TAGS.get("DateTime"),
 ]
 
+def slugify(text: str) -> str:
+    """Convert text to a URL-safe slug (cached)."""
+    s = unicodedata.normalize("NFKD", text)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^A-Za-z0-9._-]+", "-", s).strip("-._")
+    return s or "photo"
+slugify = lru_cache(maxsize=1000)(slugify)
+
+
 # Default max height for grid preview images (in pixels) - width will be proportional
 DEFAULT_PREVIEW_HEIGHT = 400
 
@@ -193,15 +202,6 @@ class ImageMetadata:
     
     def __init__(self, cache: Optional[MetadataCache] = None):
         self.cache = cache
-    
-    @staticmethod
-    @lru_cache(maxsize=1000)
-    def slugify(text: str) -> str:
-        """Convert text to URL-safe slug (cached)."""
-        s = unicodedata.normalize("NFKD", text)
-        s = s.encode("ascii", "ignore").decode("ascii")
-        s = re.sub(r"[^A-Za-z0-9._-]+", "-", s).strip("-._")
-        return s or "photo"
     
     @staticmethod
     def find_images(root: Path) -> List[Path]:
@@ -489,7 +489,7 @@ class PreviewGenerator:
             rel = image_path.relative_to(root)
         except Exception:
             rel = Path(image_path.name)
-        stem = ImageMetadata.slugify(image_path.stem)
+        stem = slugify(image_path.stem)
         h = hashlib.sha1(str(rel).encode("utf-8")).hexdigest()[:8]
         return f"{stem}-{h}.html"
     
@@ -600,7 +600,7 @@ class PreviewGenerator:
         content_hash = self._get_content_hash(src)
 
         # Determine output path with content hash (no height in filename to keep it simple)
-        base = f"{ImageMetadata.slugify(src.stem)}-{content_hash}"
+        base = f"{slugify(src.stem)}-{content_hash}"
         out = previews_dir / f"{base}.webp"
 
         # Check cache - only regenerate if source changed (content_hash differs)
