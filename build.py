@@ -800,14 +800,8 @@ class PhotoProcessor:
         print(f"\r{label} [{bar}] {i}/{n}", end=end_char, flush=True)
     
     @staticmethod
-    def _format_photo_title(photo_datetime: dt.datetime) -> str:
-        """Format photo datetime as '[July 8, 2025 at 12:28pm]'."""
-        # Format the date part: "July 8, 2025"
-        month = photo_datetime.strftime("%B")
-        day = photo_datetime.day
-        year = photo_datetime.year
-        
-        # Format the time part: "12:28pm"
+    def _format_time(photo_datetime: dt.datetime) -> str:
+        """Format the time part as '12:28pm' (12-hour clock)."""
         hour = photo_datetime.hour
         minute = photo_datetime.minute
         ampm = "am" if hour < 12 else "pm"
@@ -817,8 +811,15 @@ class PhotoProcessor:
             display_hour = hour - 12
         else:
             display_hour = hour
-            
-        formatted_datetime = f"{month} {day}, {year} at {display_hour}:{minute:02d}{ampm}"
+        return f"{display_hour}:{minute:02d}{ampm}"
+
+    @staticmethod
+    def _format_photo_title(photo_datetime: dt.datetime) -> str:
+        """Format photo datetime as '[July 8, 2025 at 12:28pm]'."""
+        month = photo_datetime.strftime("%B")
+        day = photo_datetime.day
+        year = photo_datetime.year
+        formatted_datetime = f"{month} {day}, {year} at {PhotoProcessor._format_time(photo_datetime)}"
         return f"[{formatted_datetime}]"
 
 
@@ -1069,16 +1070,7 @@ class PhotoProcessor:
                 formatted_title = self._format_photo_title(photo_datetime)
                 # Format date and time separately for info overlay
                 date_str = photo_datetime.strftime("%B %d, %Y")  # e.g., "July 8, 2025"
-                hour = photo_datetime.hour
-                minute = photo_datetime.minute
-                ampm = "am" if hour < 12 else "pm"
-                if hour == 0:
-                    display_hour = 12
-                elif hour > 12:
-                    display_hour = hour - 12
-                else:
-                    display_hour = hour
-                time_str = f"{display_hour}:{minute:02d}{ampm}"  # e.g., "12:28pm"
+                time_str = self._format_time(photo_datetime)  # e.g., "12:28pm"
             else:
                 # Fallback to filename if datetime not found
                 formatted_title = f"[{m['name']}]"

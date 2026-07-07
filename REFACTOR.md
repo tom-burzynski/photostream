@@ -125,9 +125,9 @@ Checklist of fixes to apply. Each item references the finding above.
       requirement (already in `requirements.txt`); `build.py` fails fast with a
       clear message if it is missing. `TemplateRenderer` keeps only the Jinja2
       path. (`build.py:23-28`, `build.py:717-735`, `build.py:758`, `build.py:815`)
-- [ ] **#4** Extract a single `_format_time(photo_datetime)` helper and replace the
-      duplicated am/pm logic in `_format_photo_title` and `build_gallery`.
-      (`build.py:878-898`, `build.py:1142-1152`)
+- [x] **#4** Extract a single `_format_time(photo_datetime)` helper; reused by
+      `_format_photo_title` and `build_gallery`. Removes the duplicated am/pm
+      logic. (`build.py:802-819`, `build.py:1068-1071`)
 - [ ] **#5** Use constants for the preview save. Reference `WEBP_METHOD` and add a
       `PREVIEW_WEBP_QUALITY` constant so the preview quality intent is explicit.
       (`build.py:52-53`, `build.py:634`)
