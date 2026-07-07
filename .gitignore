@@ -68,6 +68,7 @@ temp/
 CLAUDE.md
 AGENTS.md
 .claude/
+.opencode/
 
 # Documentation (keep local only)
 docs/
