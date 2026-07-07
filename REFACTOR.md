@@ -141,9 +141,10 @@ Checklist of fixes to apply. Each item references the finding above.
       exception. (`build.py:873`, `build.py:886`, `build.py:916`)
 - [x] **#9** Move `slugify` to a module-level function; updated `PreviewGenerator`
       callers. (`build.py:48`, `build.py:492`, `build.py:603`)
-- [ ] **#10** Make datetime/dimensions/gps caches content-based (like the preview
-      hash) to avoid `st_mtime` staleness on 1s-resolution filesystems.
-      (`build.py:101`)
+- [x] **#10** Make datetime/dimensions/gps caches content-based. `_get_cache_key`
+      now includes a content signature (size + first 4KB) instead of `mtime`,
+      avoiding stale hits when bytes change within 1s mtime resolution.
+      (`build.py:96-114`)
 - [ ] **#11** Reconcile docs with code: remove/adjust the "month/year picker"
       descriptions in `CLAUDE.md` / `AGENTS.md` that no longer match `index.html`.
 - [ ] **#12** Add unit tests for pure functions: `slugify`, EXIF datetime parsing,

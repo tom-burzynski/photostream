@@ -103,12 +103,25 @@ class MetadataCache:
             except Exception:
                 pass
     
-    def _get_cache_key(self, image_path: Path) -> str:
-        """Generate cache key based on filename, size, and modification time (path-independent)."""
+    def _content_signature(self, image_path: Path) -> str:
+        """Short, content-aware signature (size + first bytes) used in cache keys.
+
+        Including file content (rather than only mtime) avoids stale cache hits
+        when a file's bytes change within the 1-second mtime resolution.
+        """
         try:
             stat = image_path.stat()
+            with open(image_path, 'rb') as f:
+                head = f.read(4096)
+            return f"{stat.st_size}:{hashlib.md5(head).hexdigest()[:16]}"
+        except Exception:
+            return str(image_path.name)
+
+    def _get_cache_key(self, image_path: Path) -> str:
+        """Generate a content-aware, path-independent cache key (filename + content signature)."""
+        try:
             # Use only filename (not full path) to make cache portable between environments
-            return f"{image_path.name}:{stat.st_size}:{stat.st_mtime}"
+            return f"{image_path.name}:{self._content_signature(image_path)}"
         except Exception:
             return str(image_path.name)
     
