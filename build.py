@@ -478,6 +478,9 @@ class Config:
             object.__setattr__(self, 'workers', os.cpu_count() or 4)
         if self.cache_dir.resolve().is_relative_to(self.out_dir.resolve()):
             raise ValueError(f"Cache directory must be outside the output directory (it holds GPS data): {self.cache_dir}")
+        src, out = self.source_dir.resolve(), self.out_dir.resolve()
+        if src.is_relative_to(out) or out.is_relative_to(src):
+            raise ValueError(f"Source and output directories must not contain each other: {self.source_dir}, {self.out_dir}")
         if self.regeocode and not self.geocode:
             raise ValueError("--regeocode requires --geocode to be enabled")
 
@@ -584,20 +587,18 @@ class PreviewGenerator:
             return {"bg_color": "#000000", "accent_color": "#333333", "text_color": "#ffffff"}
     
     def _get_content_hash(self, src: Path) -> str:
-        """Generate content-based hash for cache invalidation."""
+        """Hash naming the preview file: changes when the source or the preview
+        height changes. Path-independent (filename, size, mtime, first 1KB), so
+        a Docker build and a local build of the same files agree."""
         try:
-            # Use file size, mtime, and first 1KB for fast hashing
             stat = src.stat()
             hasher = hashlib.sha256()
-            hasher.update(f"{src}:{stat.st_size}:{stat.st_mtime}".encode())
-            
-            # Add some file content for better cache invalidation
+            hasher.update(f"{src.name}:{stat.st_size}:{int(stat.st_mtime)}:{self.config.max_preview_height}".encode())
             with open(src, 'rb') as f:
                 hasher.update(f.read(1024))
-            
             return hasher.hexdigest()[:16]
         except Exception:
-            return str(abs(hash(src)) & 0xffffffff)
+            return hashlib.sha256(src.name.encode()).hexdigest()[:16]
     
     def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None, im: Optional[Image.Image] = None, content_hash: Optional[str] = None) -> Optional[Tuple[Path, int, int, Dict[str, str]]]:
         """Create or reuse a WebP preview for `src` under `previews_dir`.
@@ -1019,6 +1020,35 @@ class PhotoProcessor:
 
         print(f"\nGeocoded {geocoded_count} of {total} images.", flush=True)
 
+    def _remove_stale_outputs(self, meta: List[Dict[str, Any]], total_pages: int) -> None:
+        """Delete generated files that no current photo references: outputs of
+        removed or renamed sources, superseded previews, surplus JSON pages.
+        Without this, a photo taken out of the source folder stays reachable
+        on the deployed site."""
+        out = self.config.out_dir
+        keep = set()
+        for m in meta:
+            keep |= {(out / m["src"]).resolve(), (out / m["full"]).resolve(), (out / "view" / m["slug"]).resolve()}
+        keep |= {(out / "data" / f"page_{n}.json").resolve() for n in range(total_pages)}
+
+        candidates = [
+            *(out / "previews").glob("*.webp"),
+            *(out / "originals").rglob("*.webp"),
+            *(out / "view").glob("*.html"),
+            *(out / "data").glob("page_*.json"),
+        ]
+        removed = 0
+        for p in candidates:
+            if p.resolve() not in keep:
+                p.unlink()
+                removed += 1
+        # Drop subfolders of originals/ left empty by removed photos
+        for d in sorted((out / "originals").rglob("*"), reverse=True):
+            if d.is_dir() and not any(d.iterdir()):
+                d.rmdir()
+        if removed:
+            print(f"Removed {removed} stale output file(s).", flush=True)
+
     def build_gallery(self) -> None:
         """Main method to build the photo gallery."""
         images = ImageMetadata.find_images(self.config.source_dir)
@@ -1186,6 +1216,9 @@ class PhotoProcessor:
                 photo_time=time_str,
             )
             (view_dir / m["slug"]).write_text(html_out, encoding="utf-8")
+
+        if meta:  # an empty run (e.g. every decode failed) must not wipe the site
+            self._remove_stale_outputs(meta, total_pages)
 
         # Save cache to disk
         self.cache.save_cache()

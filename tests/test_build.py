@@ -186,8 +186,10 @@ class MetadataCacheTests(unittest.TestCase):
         self.assertEqual(c.get("datetime", self.img), dt.datetime(2020, 5, 6, 7, 8, 9))
 
     def test_config_refuses_cache_inside_out_dir(self):
+        (self.tmp / "photos").mkdir()
+        build.Config(source_dir=self.tmp / "photos", out_dir=self.tmp / "site", cache_dir=self.tmp / "other")  # control: valid
         with self.assertRaises(ValueError):
-            build.Config(source_dir=self.tmp, out_dir=self.tmp / "site", cache_dir=self.tmp / "site" / "cache")
+            build.Config(source_dir=self.tmp / "photos", out_dir=self.tmp / "site", cache_dir=self.tmp / "site" / "cache")
 
 
 class BuildOutputTests(unittest.TestCase):
@@ -207,6 +209,58 @@ class BuildOutputTests(unittest.TestCase):
             self.assertNotIn("original_path", page.read_text())
         self.assertNotIn("original_path", (tmp / "site" / "index.html").read_text())
         self.assertNotIn(str(src), (tmp / "site" / "index.html").read_text())
+
+
+class StaleOutputTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.src = self.tmp / "photos"
+        self.src.mkdir()
+        self.site = self.tmp / "site"
+        self.a = _make_photo(self.src, "a.jpg")
+        _make_photo(self.src, "b.jpg", when="2025:03:04 05:06:07")
+
+    def _files(self, sub, pattern):
+        return sorted(p.name for p in (self.site / sub).glob(pattern))
+
+    def test_removed_source_disappears_from_site(self):
+        _build(self.src, self.site, self.tmp / "cache")
+        self.assertEqual(len(self._files("view", "*.html")), 2)
+        self.a.unlink()
+        _build(self.src, self.site, self.tmp / "cache")
+        for sub, pattern in (("view", "*.html"), ("previews", "*.webp"), ("originals", "*.webp")):
+            files = self._files(sub, pattern)
+            self.assertEqual(len(files), 1, (sub, files))
+            self.assertFalse(any(f.startswith("a") for f in files), (sub, files))
+
+    def test_surplus_json_pages_removed(self):
+        _build(self.src, self.site, self.tmp / "cache", page_size=1)
+        self.assertEqual(self._files("data", "page_*.json"), ["page_0.json", "page_1.json"])
+        self.a.unlink()
+        _build(self.src, self.site, self.tmp / "cache", page_size=1)
+        self.assertEqual(self._files("data", "page_*.json"), ["page_0.json"])
+
+    def test_preview_height_change_regenerates_previews(self):
+        _build(self.src, self.site, self.tmp / "cache", max_preview_height=20)
+        before = self._files("previews", "*.webp")
+        _build(self.src, self.site, self.tmp / "cache", max_preview_height=10)
+        after = self._files("previews", "*.webp")
+        self.assertEqual(len(after), 2)
+        self.assertFalse(set(before) & set(after))
+
+    def test_preview_name_is_path_independent(self):
+        import shutil
+        other = self.tmp / "elsewhere"
+        other.mkdir()
+        copy = Path(shutil.copy2(self.a, other / "a.jpg"))
+        gen = build.PreviewGenerator(build.Config(source_dir=self.src, out_dir=self.site, cache_dir=self.tmp / "cache"))
+        self.assertEqual(gen._get_content_hash(self.a), gen._get_content_hash(copy))
+
+    def test_config_refuses_overlapping_source_and_output(self):
+        with self.assertRaises(ValueError):
+            build.Config(source_dir=self.tmp / "site" / "originals", out_dir=self.tmp / "site", cache_dir=self.tmp / "cache")
+        with self.assertRaises(ValueError):
+            build.Config(source_dir=self.tmp, out_dir=self.tmp / "site", cache_dir=self.tmp / "cache")
 
 
 if __name__ == "__main__":
