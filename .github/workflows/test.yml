@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
           cache: 'pip'
 
       - name: Install dependencies
@@ -29,6 +29,10 @@ jobs:
       - name: Verify build.py syntax
         run: |
           python3 -m py_compile build.py
+
+      - name: Run unit tests
+        run: |
+          python3 -m unittest discover -s tests -v
 
   shellcheck:
     runs-on: ubuntu-latest

@@ -55,7 +55,6 @@ Note: Gallery row height is controlled by CSS (40vh by default). Edit `templates
 #### File Watcher Settings
 - `WATCH_DELAY=5` - Seconds to wait after detecting file changes (default: 5)
 - `RUN_ON_STARTUP=true` - Build gallery when container starts (default: true)
-- `LOG_LEVEL=INFO` - Logging level (default: INFO)
 
 #### Automatic Deployment (Optional)
 - `RSYNC_ENABLED=false` - Enable automatic rsync deployment (default: false)

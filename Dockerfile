@@ -1,10 +1,4 @@
-FROM python:3.11-slim
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    inotify-tools \
-    jhead \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.14-slim
 
 # Set working directory
 WORKDIR /app
@@ -32,7 +26,6 @@ ENV PAGE_SIZE=30
 ENV WORKERS=4
 ENV WATCH_DELAY=5
 ENV RUN_ON_STARTUP=true
-ENV LOG_LEVEL=INFO
 ENV RENAME=false
 ENV TITLE="Photostream"
 ENV DESCRIPTION=""
