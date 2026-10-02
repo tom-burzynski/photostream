@@ -1155,11 +1155,11 @@ class PhotoProcessor:
             }
 
             page_file = data_dir / f"page_{page_num}.json"
-            page_file.write_text(json.dumps(page_data, ensure_ascii=False), encoding="utf-8")
+            _atomic_write_text(page_file, json.dumps(page_data, ensure_ascii=False))
 
         # Write photo index for direct photo link lookups
         photo_index_file = data_dir / "photo-index.json"
-        photo_index_file.write_text(json.dumps(photo_index, ensure_ascii=False), encoding="utf-8")
+        _atomic_write_text(photo_index_file, json.dumps(photo_index, ensure_ascii=False))
 
         # Write index.html with LCP optimization (only first page inline)
         preload_images = public_meta[:self.config.preload_count]
@@ -1181,7 +1181,7 @@ class PhotoProcessor:
             link3_url=self.config.link3_url
         )
         index_html = self.template_renderer.render_index(index_ctx)
-        (self.config.out_dir / "index.html").write_text(index_html, encoding="utf-8")
+        _atomic_write_text(self.config.out_dir / "index.html", index_html)
 
         # Write per-photo pages
         n = len(meta)
@@ -1229,7 +1229,7 @@ class PhotoProcessor:
                 photo_date=date_str,
                 photo_time=time_str,
             )
-            (view_dir / m["slug"]).write_text(html_out, encoding="utf-8")
+            _atomic_write_text(view_dir / m["slug"], html_out)
 
         if meta:  # an empty run (e.g. every decode failed) must not wipe the site
             self._remove_stale_outputs(meta, total_pages)
