@@ -263,5 +263,18 @@ class StaleOutputTests(unittest.TestCase):
             build.Config(source_dir=self.tmp, out_dir=self.tmp / "site", cache_dir=self.tmp / "cache")
 
 
+class EscapingTests(unittest.TestCase):
+    def test_filename_escaped_once_in_photo_page(self):
+        tmp = Path(tempfile.mkdtemp())
+        src = tmp / "photos"
+        src.mkdir()
+        _make_photo(src, "rock & roll.jpg")
+        _build(src, tmp / "site", tmp / "cache")
+        page = next((tmp / "site" / "view").glob("*.html")).read_text()
+        self.assertIn('alt="rock &amp; roll.jpg"', page)
+        self.assertNotIn("&amp;amp;", page)
+        self.assertIn("January 2, 2025 at 3:04am", page)
+
+
 if __name__ == "__main__":
     unittest.main()

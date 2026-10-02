@@ -5,7 +5,6 @@ import datetime as dt
 import json
 import re
 import unicodedata
-import html
 import os
 import sys
 import shutil
@@ -1182,7 +1181,7 @@ class PhotoProcessor:
             if photo_datetime:
                 formatted_title = self._format_photo_title(photo_datetime)
                 # Format date and time separately for info overlay
-                date_str = photo_datetime.strftime("%B %d, %Y")  # e.g., "July 8, 2025"
+                date_str = f"{photo_datetime:%B} {photo_datetime.day}, {photo_datetime.year}"  # e.g., "July 8, 2025"
                 time_str = self._format_time(photo_datetime)  # e.g., "12:28pm"
             else:
                 # Fallback to filename if datetime not found
@@ -1196,7 +1195,7 @@ class PhotoProcessor:
             country = location.get("country", "") if location else ""
 
             html_out = self.template_renderer.render_photo(
-                title=html.escape(formatted_title),
+                title=formatted_title,
                 prev_page=f"./{meta[prev_idx]['slug']}",
                 next_page=f"./{meta[next_idx]['slug']}",
                 prev_id=meta[prev_idx]['id'],
@@ -1205,7 +1204,7 @@ class PhotoProcessor:
                 preview_src=f"../{m['src']}",
                 img_width=m['w'],
                 img_height=m['h'],
-                alt=html.escape(m["name"]),
+                alt=m["name"],
                 anchor_id=m["id"],
                 bg_color=m.get("bg_color", "#000000"),
                 accent_color=m.get("accent_color", "#333333"),
