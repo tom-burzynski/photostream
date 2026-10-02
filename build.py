@@ -93,7 +93,19 @@ COLOR_BRIGHTNESS_THRESHOLD = 128  # Threshold for choosing light/dark text
 
 # Geocoding settings
 GEOCODE_TIMEOUT = 5  # Timeout in seconds for geocoding API requests
-GEOCODE_USER_AGENT = 'photostream/1.0'
+# Nominatim's usage policy requires an identifying User-Agent and at most 1 request/second
+GEOCODE_USER_AGENT = f"photostream/{__version__} (+https://github.com/tom-burzynski/photostream)"
+GEOCODE_MIN_INTERVAL = 1.0  # seconds between geocoding requests
+_last_geocode_request = 0.0
+
+
+def _throttle_geocode() -> None:
+    """Sleep as needed so geocoding requests are GEOCODE_MIN_INTERVAL apart."""
+    global _last_geocode_request
+    wait = _last_geocode_request + GEOCODE_MIN_INTERVAL - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    _last_geocode_request = time.monotonic()
 
 # Sentinel for "not in the cache", distinct from a cached None.
 MISSING = object()
@@ -398,6 +410,7 @@ def geocode_coordinates(lat: float, lon: float, timeout: int = GEOCODE_TIMEOUT) 
         url = f"https://nominatim.openstreetmap.org/reverse?{params}"
 
         req = urllib.request.Request(url, headers={'User-Agent': GEOCODE_USER_AGENT})
+        _throttle_geocode()
         with urllib.request.urlopen(req, timeout=timeout) as response:
             data = json.loads(response.read().decode('utf-8'))
 
@@ -424,6 +437,7 @@ def geocode_coordinates(lat: float, lon: float, timeout: int = GEOCODE_TIMEOUT) 
         url = f"https://photon.komoot.io/reverse?{params}"
 
         req = urllib.request.Request(url, headers={'User-Agent': GEOCODE_USER_AGENT})
+        _throttle_geocode()
         with urllib.request.urlopen(req, timeout=timeout) as response:
             data = json.loads(response.read().decode('utf-8'))
 

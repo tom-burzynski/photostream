@@ -276,5 +276,29 @@ class EscapingTests(unittest.TestCase):
         self.assertIn("January 2, 2025 at 3:04am", page)
 
 
+class GeocodeThrottleTests(unittest.TestCase):
+    def test_requests_are_spaced_by_min_interval(self):
+        from unittest import mock
+
+        clock = [100.0]
+        sleeps = []
+
+        def fake_sleep(sec):
+            sleeps.append(sec)
+            clock[0] += sec
+
+        with mock.patch.object(build.time, "monotonic", lambda: clock[0]), \
+             mock.patch.object(build.time, "sleep", fake_sleep), \
+             mock.patch.object(build, "_last_geocode_request", 0.0), \
+             mock.patch.object(build.urllib.request, "urlopen", side_effect=OSError("offline")):
+            self.assertIsNone(build.geocode_coordinates(52.0, 21.0))  # Nominatim, then Photon
+            self.assertIsNone(build.geocode_coordinates(52.0, 21.0))
+        # 4 requests at a frozen clock: the first goes out at once, the other 3 wait 1s each
+        self.assertEqual(sleeps, [build.GEOCODE_MIN_INTERVAL] * 3)
+
+    def test_user_agent_identifies_the_project(self):
+        self.assertIn("github.com/tom-burzynski/photostream", build.GEOCODE_USER_AGENT)
+
+
 if __name__ == "__main__":
     unittest.main()
