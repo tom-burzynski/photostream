@@ -15,6 +15,7 @@ build_gallery() {
     # Build command with environment variables (-u for unbuffered output)
     CMD="python3 -u build.py /app/originals \
         --out-dir /app/site \
+        --cache-dir /app/cache \
         --preview-height ${PREVIEW_HEIGHT} \
         --preload-count ${PRELOAD_COUNT} \
         --page-size ${PAGE_SIZE} \
@@ -87,7 +88,7 @@ log "  RUN_ON_STARTUP: ${RUN_ON_STARTUP}"
 log "  WEB_SERVER_PORT: ${WEB_SERVER_PORT}"
 
 # Ensure directories exist
-mkdir -p /app/originals /app/site
+mkdir -p /app/originals /app/site /app/cache
 
 # Start Python web server in background if port is configured
 if [ ! -z "${WEB_SERVER_PORT}" ] && [ "${WEB_SERVER_PORT}" != "0" ]; then

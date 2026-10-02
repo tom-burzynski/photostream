@@ -12,6 +12,7 @@ services:
     volumes:
       - ./originals:/app/originals             # Source photos
       - ./site:/app/site                       # Generated site output
+      - ./cache:/app/cache                     # Metadata cache (GPS data; keep it out of ./site)
       # Example: Mount to web server directory
       # - /var/www/html/gallery:/app/site       # Direct deployment to web server
       # - /path/to/your/site:/app/site          # Mount to your chosen location

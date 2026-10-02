@@ -86,7 +86,7 @@ docker-compose -f docker-compose.build.yml up -d
 This starts a container that monitors your originals directory, automatically rebuilds the gallery when photos are added or removed, and serves the gallery on port 8080 for live preview.
 
 ## Caching and performance
-- A small on-disk cache (.metadata_cache.pkl) stores image metadata, colors, GPS coordinates, location names, and preview hashes to speed up subsequent runs.
+- A small on-disk cache (`cache/metadata.json`, set with `--cache-dir`) stores image metadata, colors, GPS coordinates, location names, and preview hashes to speed up subsequent runs. It lives outside the output directory so it is never deployed with the site; a build refuses a cache directory inside `--out-dir`.
 - Previews are created with a maximum height (default 500px) to optimize gallery loading speed. Width scales proportionally.
 - Lower preview heights significantly reduce file sizes: 500px ≈ 40-50KB per image, vs 1600px ≈ 400-450KB per image.
 - LCP (Largest Contentful Paint) optimization: First few images are preloaded with high priority for faster above-the-fold loading.

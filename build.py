@@ -96,38 +96,96 @@ COLOR_BRIGHTNESS_THRESHOLD = 128  # Threshold for choosing light/dark text
 GEOCODE_TIMEOUT = 5  # Timeout in seconds for geocoding API requests
 GEOCODE_USER_AGENT = 'photostream/1.0'
 
+# Sentinel for "not in the cache", distinct from a cached None.
+MISSING = object()
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write via a temp file + rename so readers (or a crash) never see a
+    half-written file."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 class MetadataCache:
-    """Persistent cache for image metadata to avoid repeated operations."""
-    
-    def __init__(self, cache_dir: Path):
+    """Persistent JSON cache of per-image metadata, keyed by kind and file.
+
+    It holds exact GPS coordinates, so it must live OUTSIDE the output
+    directory: anything under out_dir gets deployed.
+    """
+
+    KINDS = ("datetime", "dimensions", "preview_hash", "colors", "gps", "location")
+    LEGACY_FILE = Path("data") / ".metadata_cache.pkl"  # relative to out_dir
+
+    def __init__(self, cache_dir: Path, legacy_out_dir: Optional[Path] = None):
         self.cache_dir = cache_dir
-        # Store cache in data/ subdirectory alongside pagination files
-        self.data_dir = cache_dir / "data"
-        self.cache_file = self.data_dir / ".metadata_cache.pkl"
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self._cache = self._load_cache()
+        self.cache_file = cache_dir / "metadata.json"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._keys: Dict[Path, str] = {}
         self._dirty = False
-    
+        self._cache = self._load_cache()
+        if legacy_out_dir is not None:
+            self._migrate_legacy(legacy_out_dir / self.LEGACY_FILE)
+
     def _load_cache(self) -> Dict[str, Any]:
         """Load cache from disk or create empty cache."""
+        if not self.cache_file.exists():
+            return {}
         try:
-            if self.cache_file.exists():
-                with open(self.cache_file, 'rb') as f:
-                    return pickle.load(f)
-        except Exception:
-            pass
-        return {}
-    
+            return json.loads(self.cache_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"Warning: Ignoring unreadable cache {self.cache_file}: {e}", file=sys.stderr)
+            return {}
+
+    def _migrate_legacy(self, legacy: Path) -> None:
+        """Import, then delete, the old pickle cache that lived inside the
+        published output. It is deleted even if the import fails: the data
+        regenerates, the leak does not undo itself."""
+        if not legacy.exists():
+            return
+        if not self._cache:
+            try:
+                with open(legacy, "rb") as f:
+                    old = pickle.load(f)
+                for key, value in old.items():
+                    kind = key.split(":", 1)[0]
+                    if kind in self.KINDS:
+                        self._cache[key] = self._encode(kind, value)
+                self._dirty = True
+                self.save_cache()
+            except Exception as e:
+                print(f"Warning: Could not import legacy cache {legacy}: {e}", file=sys.stderr)
+        legacy.unlink()
+        print(f"Moved metadata cache out of the site output to {self.cache_file}", flush=True)
+
     def save_cache(self) -> None:
         """Save cache to disk if dirty."""
         if self._dirty:
             try:
-                with open(self.cache_file, 'wb') as f:
-                    pickle.dump(self._cache, f)
+                _atomic_write_text(self.cache_file, json.dumps(self._cache, ensure_ascii=False))
                 self._dirty = False
-            except Exception:
-                pass
-    
+            except Exception as e:
+                print(f"Warning: Could not save cache {self.cache_file}: {e}", file=sys.stderr)
+
+    @staticmethod
+    def _encode(kind: str, value: Any) -> Any:
+        if kind == "datetime" and value is not None:
+            return value.isoformat()
+        if isinstance(value, tuple):
+            return list(value)
+        return value
+
+    @staticmethod
+    def _decode(kind: str, value: Any) -> Any:
+        if value is None:
+            return None
+        if kind == "datetime":
+            return dt.datetime.fromisoformat(value)
+        if kind in ("dimensions", "gps"):
+            return tuple(value)
+        return value
+
     def _content_signature(self, image_path: Path) -> str:
         """Short, content-aware signature (size + first bytes) used in cache keys.
 
@@ -142,105 +200,55 @@ class MetadataCache:
         except Exception:
             return str(image_path.name)
 
-    def _get_cache_key(self, image_path: Path) -> str:
-        """Generate a content-aware, path-independent cache key (filename + content signature)."""
-        try:
-            # Use only filename (not full path) to make cache portable between environments
-            return f"{image_path.name}:{self._content_signature(image_path)}"
-        except Exception:
-            return str(image_path.name)
-    
-    def get_datetime(self, image_path: Path) -> Optional[dt.datetime]:
-        """Get cached datetime or None if not cached/invalid."""
-        key = f"datetime:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
-    
-    def set_datetime(self, image_path: Path, datetime_val: dt.datetime) -> None:
-        """Cache datetime value."""
-        key = f"datetime:{self._get_cache_key(image_path)}"
-        self._cache[key] = datetime_val
-        self._dirty = True
-    
-    def get_dimensions(self, image_path: Path) -> Optional[Tuple[int, int]]:
-        """Get cached dimensions or None if not cached/invalid."""
-        key = f"dimensions:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
-    
-    def set_dimensions(self, image_path: Path, dimensions: Tuple[int, int]) -> None:
-        """Cache dimensions value."""
-        key = f"dimensions:{self._get_cache_key(image_path)}"
-        self._cache[key] = dimensions
-        self._dirty = True
-    
-    def get_preview_hash(self, image_path: Path) -> Optional[str]:
-        """Get cached preview hash or None if not cached/invalid."""
-        key = f"preview_hash:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
-    
-    def set_preview_hash(self, image_path: Path, hash_val: str) -> None:
-        """Cache preview hash value."""
-        key = f"preview_hash:{self._get_cache_key(image_path)}"
-        self._cache[key] = hash_val
-        self._dirty = True
-    
-    def get_colors(self, image_path: Path) -> Optional[Dict[str, str]]:
-        """Get cached color data or None if not cached/invalid."""
-        key = f"colors:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
-    
-    def set_colors(self, image_path: Path, colors: Dict[str, str]) -> None:
-        """Cache color data."""
-        key = f"colors:{self._get_cache_key(image_path)}"
-        self._cache[key] = colors
-        self._dirty = True
+    def key(self, image_path: Path) -> str:
+        """Content-aware, path-independent key (filename + content signature).
 
-    def get_gps(self, image_path: Path) -> Optional[Tuple[float, float]]:
-        """Get cached GPS coordinates or None if not cached/invalid."""
-        key = f"gps:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
+        Computed once per file per build: the cache lives for a single build,
+        and recomputing means reopening the file on every lookup.
+        """
+        k = self._keys.get(image_path)
+        if k is None:
+            # Filename only (not full path) keeps the cache portable between environments
+            k = f"{image_path.name}:{self._content_signature(image_path)}"
+            self._keys[image_path] = k
+        return k
 
-    def set_gps(self, image_path: Path, gps: Optional[Tuple[float, float]]) -> None:
-        """Cache GPS coordinates."""
-        key = f"gps:{self._get_cache_key(image_path)}"
-        self._cache[key] = gps
-        self._dirty = True
+    def get(self, kind: str, image_path: Path, default: Any = None) -> Any:
+        """Cached value, or `default` if absent. Pass MISSING as the default
+        to tell "not cached" apart from a cached None."""
+        value = self._cache.get(f"{kind}:{self.key(image_path)}", MISSING)
+        return default if value is MISSING else self._decode(kind, value)
 
-    def get_location(self, image_path: Path) -> Optional[Dict[str, str]]:
-        """Get cached location data or None if not cached/invalid."""
-        key = f"location:{self._get_cache_key(image_path)}"
-        return self._cache.get(key)
-
-    def set_location(self, image_path: Path, location: Optional[Dict[str, str]]) -> None:
-        """Cache location data (city, country, etc)."""
-        key = f"location:{self._get_cache_key(image_path)}"
-        self._cache[key] = location
+    def set(self, kind: str, image_path: Path, value: Any) -> None:
+        self._cache[f"{kind}:{self.key(image_path)}"] = self._encode(kind, value)
         self._dirty = True
 
     def cleanup_stale_entries(self, valid_paths: List[Path]) -> None:
         """Remove cache entries for files that no longer exist."""
-        valid_keys = set()
-        for path in valid_paths:
-            cache_key = self._get_cache_key(path)
-            valid_keys.add(f"datetime:{cache_key}")
-            valid_keys.add(f"dimensions:{cache_key}")
-            valid_keys.add(f"preview_hash:{cache_key}")
-            valid_keys.add(f"colors:{cache_key}")
-            valid_keys.add(f"gps:{cache_key}")
-            valid_keys.add(f"location:{cache_key}")
-        
-        stale_keys = [key for key in self._cache.keys() if key not in valid_keys]
+        valid_keys = {f"{kind}:{self.key(p)}" for p in valid_paths for kind in self.KINDS}
+        stale_keys = [key for key in self._cache if key not in valid_keys]
         if stale_keys:
             for key in stale_keys:
                 del self._cache[key]
             self._dirty = True
-
 
 class ImageMetadata:
     """Handles image metadata extraction and datetime parsing with caching."""
     
     def __init__(self, cache: Optional[MetadataCache] = None):
         self.cache = cache
-    
+
+    def _cached(self, kind: str, image_path: Path, compute):
+        """Return the cached `kind` value for the file, computing and storing it on a miss."""
+        if self.cache:
+            cached = self.cache.get(kind, image_path, MISSING)
+            if cached is not MISSING:
+                return cached
+        value = compute(image_path)
+        if self.cache:
+            self.cache.set(kind, image_path, value)
+        return value
+
     @staticmethod
     def find_images(root: Path) -> List[Path]:
         """Find all image files recursively."""
@@ -283,21 +291,8 @@ class ImageMetadata:
     
     def extract_datetime(self, image_path: Path) -> dt.datetime:
         """Prefer EXIF DateTimeOriginal; fall back to file mtime (cached)."""
-        # Check cache first
-        if self.cache:
-            cached = self.cache.get_datetime(image_path)
-            if cached is not None:
-                return cached
-        
-        # Extract datetime
-        datetime_val = self._extract_datetime_uncached(image_path)
-        
-        # Cache the result
-        if self.cache:
-            self.cache.set_datetime(image_path, datetime_val)
-        
-        return datetime_val
-    
+        return self._cached("datetime", image_path, self._extract_datetime_uncached)
+
     def _extract_datetime_uncached(self, image_path: Path) -> dt.datetime:
         """Extract datetime without caching."""
         try:
@@ -327,20 +322,7 @@ class ImageMetadata:
     
     def extract_gps(self, image_path: Path) -> Optional[Tuple[float, float]]:
         """Extract GPS coordinates from EXIF data (latitude, longitude) (cached)."""
-        # Check cache first
-        if self.cache:
-            cached = self.cache.get_gps(image_path)
-            if cached is not None:
-                return cached
-
-        # Extract GPS
-        gps_coords = self._extract_gps_uncached(image_path)
-
-        # Cache the result
-        if self.cache:
-            self.cache.set_gps(image_path, gps_coords)
-
-        return gps_coords
+        return self._cached("gps", image_path, self._extract_gps_uncached)
 
     def _extract_gps_uncached(self, image_path: Path) -> Optional[Tuple[float, float]]:
         """Extract GPS coordinates without caching."""
@@ -387,21 +369,8 @@ class ImageMetadata:
 
     def get_image_dimensions(self, image_path: Path) -> Tuple[int, int]:
         """Extract image dimensions without loading the full image (cached)."""
-        # Check cache first
-        if self.cache:
-            cached = self.cache.get_dimensions(image_path)
-            if cached is not None:
-                return cached
-        
-        # Extract dimensions
-        dimensions = self._get_dimensions_uncached(image_path)
-        
-        # Cache the result
-        if self.cache:
-            self.cache.set_dimensions(image_path, dimensions)
-        
-        return dimensions
-    
+        return self._cached("dimensions", image_path, self._get_dimensions_uncached)
+
     def _get_dimensions_uncached(self, image_path: Path) -> Tuple[int, int]:
         """Extract display dimensions without decoding pixels.
 
@@ -483,6 +452,7 @@ def geocode_coordinates(lat: float, lon: float, timeout: int = GEOCODE_TIMEOUT) 
 class Config:
     source_dir: Path
     out_dir: Path
+    cache_dir: Path = Path("cache")
     max_preview_height: int = DEFAULT_PREVIEW_HEIGHT
     preload_count: int = 20
     workers: int = 4
@@ -506,6 +476,8 @@ class Config:
             raise ValueError(f"Max preview height must be positive: {self.max_preview_height}")
         if self.workers <= 0:
             object.__setattr__(self, 'workers', os.cpu_count() or 4)
+        if self.cache_dir.resolve().is_relative_to(self.out_dir.resolve()):
+            raise ValueError(f"Cache directory must be outside the output directory (it holds GPS data): {self.cache_dir}")
         if self.regeocode and not self.geocode:
             raise ValueError("--regeocode requires --geocode to be enabled")
 
@@ -653,8 +625,8 @@ class PreviewGenerator:
             # Cache hit: reuse the existing preview WITHOUT decoding the source.
             # Dimensions come from cached metadata so no image open is needed.
             if self.cache:
-                cached_hash = self.cache.get_preview_hash(src)
-                cached_colors = self.cache.get_colors(src)
+                cached_hash = self.cache.get("preview_hash", src)
+                cached_colors = self.cache.get("colors", src)
                 if cached_hash == content_hash and cached_colors and out.exists():
                     w, h = (1, 1)
                     if image_metadata:
@@ -693,8 +665,8 @@ class PreviewGenerator:
 
                 # Cache the hash and colors
                 if self.cache:
-                    self.cache.set_preview_hash(src, content_hash)
-                    self.cache.set_colors(src, colors)
+                    self.cache.set("preview_hash", src, content_hash)
+                    self.cache.set("colors", src, colors)
 
             except Exception:
                 # Do NOT fall back to the original file: it would leak EXIF/GPS
@@ -853,7 +825,7 @@ class PhotoProcessor:
     
     def __init__(self, config: Config, template_dir: Optional[Path] = None):
         self.config = config
-        self.cache = MetadataCache(config.out_dir)
+        self.cache = MetadataCache(config.cache_dir, legacy_out_dir=config.out_dir)
         self.image_metadata = ImageMetadata(self.cache)
         self.preview_generator = PreviewGenerator(config, self.cache)
         self.template_renderer = TemplateRenderer(template_dir)
@@ -920,8 +892,8 @@ class PhotoProcessor:
             content_hash = self.preview_generator._get_content_hash(image_path)
             preview_cached = False
             if self.cache and not convert_needed:
-                cached_hash = self.cache.get_preview_hash(image_path)
-                cached_colors = self.cache.get_colors(image_path)
+                cached_hash = self.cache.get("preview_hash", image_path)
+                cached_colors = self.cache.get("colors", image_path)
                 preview_out = previews_dir / f"{slugify(image_path.stem)}-{content_hash}.webp"
                 preview_cached = bool(
                     cached_hash == content_hash and cached_colors and preview_out.exists()
@@ -1001,7 +973,7 @@ class PhotoProcessor:
             original_path = Path(m["original_path"])
 
             # Check cache first
-            location = self.cache.get_location(original_path)
+            location = self.cache.get("location", original_path)
 
             # If regeocode flag is set, retry only failed geocoding attempts (empty dicts with GPS data)
             should_retry = False
@@ -1027,20 +999,20 @@ class PhotoProcessor:
                 location = geocode_coordinates(lat, lon)
                 if location:
                     m["location"] = location
-                    self.cache.set_location(original_path, location)
+                    self.cache.set("location", original_path, location)
                     self.cache.save_cache()  # Save after each successful geocode
                     geocoded_count += 1
                     print(f" → {location.get('city', 'Unknown')}", flush=True)
                 else:
                     # No location found, cache empty dict to avoid re-querying
                     m["location"] = {}
-                    self.cache.set_location(original_path, {})
+                    self.cache.set("location", original_path, {})
                     self.cache.save_cache()  # Save to avoid re-querying
                     print(f" → No location found", flush=True)
             else:
                 # No GPS data, cache empty dict
                 m["location"] = {}
-                self.cache.set_location(original_path, {})
+                self.cache.set("location", original_path, {})
                 self.cache.save_cache()  # Save to avoid re-processing
                 if not should_retry:  # Only print if not a retry attempt
                     print(f"  [{idx}/{total}] {original_path.name}: No GPS data", flush=True)
@@ -1070,11 +1042,11 @@ class PhotoProcessor:
 
         # Prepare directories
         view_dir = self.config.out_dir / "view"
-        view_dir.mkdir(exist_ok=True)
+        view_dir.mkdir(parents=True, exist_ok=True)
         previews_dir = self.config.out_dir / "previews"
-        previews_dir.mkdir(exist_ok=True)
+        previews_dir.mkdir(parents=True, exist_ok=True)
         originals_dir = self.config.out_dir / "originals"
-        originals_dir.mkdir(exist_ok=True)
+        originals_dir.mkdir(parents=True, exist_ok=True)
 
         self.preview_generator.copy_favicon(self.config.out_dir)
 
@@ -1106,9 +1078,12 @@ class PhotoProcessor:
 
         print("Writing index and pages...", flush=True)
 
+        # What gets published: drop build-only fields (the source path) from the JSON
+        public_meta = [{k: v for k, v in m.items() if k != "original_path"} for m in meta]
+
         # Generate paginated JSON data for infinite scroll
         data_dir = self.config.out_dir / "data"
-        data_dir.mkdir(exist_ok=True)
+        data_dir.mkdir(parents=True, exist_ok=True)
 
         # Split photos into pages
         page_size = self.config.page_size
@@ -1119,7 +1094,7 @@ class PhotoProcessor:
         for page_num in range(total_pages):
             start_idx = page_num * page_size
             end_idx = min(start_idx + page_size, len(meta))
-            page_photos = meta[start_idx:end_idx]
+            page_photos = public_meta[start_idx:end_idx]
 
             # Add each photo to the index
             for photo in page_photos:
@@ -1143,8 +1118,8 @@ class PhotoProcessor:
         photo_index_file.write_text(json.dumps(photo_index, ensure_ascii=False), encoding="utf-8")
 
         # Write index.html with LCP optimization (only first page inline)
-        preload_images = meta[:self.config.preload_count] if meta else []
-        first_page_photos = meta[:page_size] if meta else []
+        preload_images = public_meta[:self.config.preload_count]
+        first_page_photos = public_meta[:page_size]
 
         index_ctx = IndexPageContext(
             photos_json=json.dumps(first_page_photos, ensure_ascii=False),
@@ -1222,7 +1197,7 @@ class PhotoProcessor:
             f"- {originals_dir}/* (copied originals)\n"
             f"- {previews_dir}/* (grid previews)\n"
             f"- {view_dir}/* ({n} pages)\n"
-            f"- data/.metadata_cache.pkl (cached metadata)"
+            f"- {self.cache.cache_file} (cached metadata, not published)"
         )
 
 
@@ -1232,6 +1207,7 @@ def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
     config_defaults = {
         "folder": "./originals",
         "out_dir": "./site",
+        "cache_dir": "./cache",
         "workers": os.cpu_count() or 4,
         "template_dir": None,
         "preview_height": DEFAULT_PREVIEW_HEIGHT,
@@ -1269,6 +1245,8 @@ def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
                 config_defaults["folder"] = build_section["folder"]
             if "out_dir" in build_section:
                 config_defaults["out_dir"] = build_section["out_dir"]
+            if "cache_dir" in build_section and build_section["cache_dir"]:
+                config_defaults["cache_dir"] = build_section["cache_dir"]
             if "workers" in build_section:
                 config_defaults["workers"] = build_section.getint("workers")
             if "template_dir" in build_section and build_section["template_dir"]:
@@ -1348,6 +1326,8 @@ def parse_args():
                     help="Path to configuration file (default: config.ini).")
     ap.add_argument("--out-dir", type=Path,
                     help="Directory to write index.html, previews/, and view/. Defaults to current working directory.")
+    ap.add_argument("--cache-dir", type=Path,
+                    help="Directory for the metadata cache (default: ./cache). Keep it outside --out-dir: it holds GPS data.")
     ap.add_argument("--workers", type=int,
                     help="Number of worker threads to use for image processing (default: number of CPU cores).")
     ap.add_argument("--template-dir", type=Path,
@@ -1385,6 +1365,7 @@ def parse_args():
     ap.set_defaults(
         folder=config_defaults["folder"],
         out_dir=config_defaults["out_dir"],
+        cache_dir=config_defaults["cache_dir"],
         workers=config_defaults["workers"],
         template_dir=config_defaults["template_dir"],
         preview_height=config_defaults["preview_height"],
@@ -1497,7 +1478,8 @@ def main():
 
         config = Config(
             source_dir=args.folder,
-            out_dir=args.out_dir or Path.cwd(),
+            out_dir=Path(args.out_dir),
+            cache_dir=Path(args.cache_dir),
             max_preview_height=args.preview_height,
             preload_count=args.preload_count,
             page_size=args.page_size,

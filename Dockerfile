@@ -23,7 +23,7 @@ COPY docker-watcher.sh .
 RUN chmod +x docker-watcher.sh
 
 # Create directories for volumes
-RUN mkdir -p /app/originals /app/site
+RUN mkdir -p /app/originals /app/site /app/cache
 
 # Environment variables with defaults
 ENV PREVIEW_HEIGHT=400

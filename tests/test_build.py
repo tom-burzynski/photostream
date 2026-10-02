@@ -1,4 +1,8 @@
+import contextlib
 import datetime as dt
+import io
+import json
+import pickle
 import tempfile
 import unittest
 from pathlib import Path
@@ -123,6 +127,86 @@ class DimensionsTests(unittest.TestCase):
     def test_orientation_7_swaps(self):
         p = self._make_image((20, 40), orientation=7)
         self.assertEqual(build.ImageMetadata().get_image_dimensions(p), (40, 20))
+
+
+def _make_photo(folder, name, when="2025:01:02 03:04:05", size=(40, 30), gps=False):
+    """Write a small JPEG with a DateTimeOriginal (and optionally GPS) tag."""
+    from PIL import Image
+
+    exif = Image.Exif()
+    exif[0x9003] = when
+    if gps:
+        exif.get_ifd(0x8825).update({1: "N", 2: (52.0, 13.0, 0.0), 3: "E", 4: (21.0, 0.0, 0.0)})
+    p = Path(folder) / name
+    Image.new("RGB", size, (120, 60, 30)).save(p, exif=exif.tobytes())
+    return p
+
+
+def _build(src, out, cache, **kwargs):
+    cfg = build.Config(source_dir=Path(src), out_dir=Path(out), cache_dir=Path(cache), workers=2, **kwargs)
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        build.PhotoProcessor(cfg).build_gallery()
+
+
+class MetadataCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.img = _make_photo(self.tmp, "a.jpg")
+
+    def test_round_trip_through_json(self):
+        c = build.MetadataCache(self.tmp / "cache")
+        c.set("datetime", self.img, dt.datetime(2025, 1, 2, 3, 4, 5))
+        c.set("dimensions", self.img, (40, 30))
+        c.set("gps", self.img, None)
+        c.save_cache()
+        c2 = build.MetadataCache(self.tmp / "cache")
+        self.assertEqual(c2.get("datetime", self.img), dt.datetime(2025, 1, 2, 3, 4, 5))
+        self.assertEqual(c2.get("dimensions", self.img), (40, 30))
+        json.loads((self.tmp / "cache" / "metadata.json").read_text())  # plain JSON on disk
+
+    def test_cached_none_is_not_missing(self):
+        c = build.MetadataCache(self.tmp / "cache")
+        self.assertIs(c.get("gps", self.img, build.MISSING), build.MISSING)
+        c.set("gps", self.img, None)
+        self.assertIsNone(c.get("gps", self.img, build.MISSING))
+
+    def test_legacy_pickle_is_imported_and_deleted(self):
+        out = self.tmp / "site"
+        legacy = out / "data" / ".metadata_cache.pkl"
+        legacy.parent.mkdir(parents=True)
+        key = build.MetadataCache(self.tmp / "scratch").key(self.img)
+        legacy.write_bytes(pickle.dumps({
+            f"gps:{key}": (52.0, 21.0),
+            f"datetime:{key}": dt.datetime(2020, 5, 6, 7, 8, 9),
+        }))
+        with contextlib.redirect_stdout(io.StringIO()):
+            c = build.MetadataCache(self.tmp / "cache", legacy_out_dir=out)
+        self.assertFalse(legacy.exists())
+        self.assertEqual(c.get("gps", self.img), (52.0, 21.0))
+        self.assertEqual(c.get("datetime", self.img), dt.datetime(2020, 5, 6, 7, 8, 9))
+
+    def test_config_refuses_cache_inside_out_dir(self):
+        with self.assertRaises(ValueError):
+            build.Config(source_dir=self.tmp, out_dir=self.tmp / "site", cache_dir=self.tmp / "site" / "cache")
+
+
+class BuildOutputTests(unittest.TestCase):
+    def test_site_holds_no_cache_or_source_paths(self):
+        tmp = Path(tempfile.mkdtemp())
+        src = tmp / "photos"
+        src.mkdir()
+        _make_photo(src, "a.jpg", gps=True)
+        _make_photo(src, "b.jpg", when="2025:03:04 05:06:07")
+        _build(src, tmp / "site", tmp / "cache")
+
+        site_files = [p.name for p in (tmp / "site").rglob("*")]
+        self.assertNotIn(".metadata_cache.pkl", site_files)
+        self.assertNotIn("metadata.json", site_files)
+        self.assertTrue((tmp / "cache" / "metadata.json").exists())
+        for page in (tmp / "site" / "data").glob("*.json"):
+            self.assertNotIn("original_path", page.read_text())
+        self.assertNotIn("original_path", (tmp / "site" / "index.html").read_text())
+        self.assertNotIn(str(src), (tmp / "site" / "index.html").read_text())
 
 
 if __name__ == "__main__":

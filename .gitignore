@@ -73,3 +73,6 @@ AGENTS.md
 # Documentation (keep local only)
 docs/
 
+
+# Metadata cache (holds GPS coordinates; never publish)
+cache/

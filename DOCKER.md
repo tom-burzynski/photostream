@@ -68,6 +68,7 @@ The container expects these volumes to be mounted:
 
 - `./originals:/app/originals:ro` - Source photos directory (read-only)
 - `./site:/app/site` - Generated gallery output directory
+- `./cache:/app/cache` - Metadata cache (holds GPS coordinates, so it stays out of the published site; without this mount it is rebuilt on every container start)
 - `./ssh:/app/ssh:ro` - SSH keys for rsync deployment (optional)
 
 ## Deployment Examples
@@ -81,6 +82,7 @@ services:
     volumes:
       - ./originals:/app/originals:ro
       - ./site:/app/site
+      - ./cache:/app/cache
     environment:
       - PREVIEW_HEIGHT=400
       - WORKERS=4
@@ -95,6 +97,7 @@ services:
     volumes:
       - ./originals:/app/originals:ro
       - ./site:/app/site
+      - ./cache:/app/cache
       - ./ssh:/app/ssh:ro
     environment:
       - PREVIEW_HEIGHT=350
