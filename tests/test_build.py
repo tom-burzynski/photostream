@@ -314,5 +314,20 @@ class DeployResultTests(unittest.TestCase):
                 self.assertTrue(build.deploy_gallery(out, "rclone", {"rclone_destination": "x:y"}))
 
 
+class WarmRebuildTests(unittest.TestCase):
+    def test_unchanged_photos_are_not_decoded(self):
+        from unittest import mock
+
+        tmp = Path(tempfile.mkdtemp())
+        src = tmp / "photos"
+        src.mkdir()
+        _make_photo(src, "a.jpg")
+        _make_photo(src, "b.jpg", when="2025:03:04 05:06:07")
+        _build(src, tmp / "site", tmp / "cache")
+        with mock.patch.object(build.Image, "open", side_effect=AssertionError("decoded")):
+            _build(src, tmp / "site", tmp / "cache")
+        self.assertEqual(len(list((tmp / "site" / "view").glob("*.html"))), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

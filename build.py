@@ -614,6 +614,20 @@ class PreviewGenerator:
         except Exception:
             return hashlib.sha256(src.name.encode()).hexdigest()[:16]
     
+    @staticmethod
+    def preview_path(src: Path, previews_dir: Path, content_hash: str) -> Path:
+        return previews_dir / f"{slugify(src.stem)}-{content_hash}.webp"
+
+    def cached_preview(self, src: Path, previews_dir: Path, content_hash: str) -> Optional[Tuple[Path, Dict[str, str]]]:
+        """(preview_path, colors) if an up-to-date preview already exists, else None."""
+        if not self.cache:
+            return None
+        out = self.preview_path(src, previews_dir, content_hash)
+        colors = self.cache.get("colors", src)
+        if self.cache.get("preview_hash", src) == content_hash and colors and out.exists():
+            return out, colors
+        return None
+
     def generate_preview(self, src: Path, previews_dir: Path, image_metadata: Optional[ImageMetadata] = None, im: Optional[Image.Image] = None, content_hash: Optional[str] = None) -> Optional[Tuple[Path, int, int, Dict[str, str]]]:
         """Create or reuse a WebP preview for `src` under `previews_dir`.
 
@@ -633,20 +647,14 @@ class PreviewGenerator:
             if content_hash is None:
                 content_hash = self._get_content_hash(src)
 
-            # Determine output path with content hash (no height in filename to keep it simple)
-            base = f"{slugify(src.stem)}-{content_hash}"
-            out = previews_dir / f"{base}.webp"
+            out = self.preview_path(src, previews_dir, content_hash)
 
             # Cache hit: reuse the existing preview WITHOUT decoding the source.
             # Dimensions come from cached metadata so no image open is needed.
-            if self.cache:
-                cached_hash = self.cache.get("preview_hash", src)
-                cached_colors = self.cache.get("colors", src)
-                if cached_hash == content_hash and cached_colors and out.exists():
-                    w, h = (1, 1)
-                    if image_metadata:
-                        w, h = image_metadata.get_image_dimensions(src)
-                    return (out, w, h, cached_colors)
+            hit = self.cached_preview(src, previews_dir, content_hash)
+            if hit:
+                w, h = image_metadata.get_image_dimensions(src) if image_metadata else (1, 1)
+                return (out, w, h, hit[1])
 
             # Cache miss (or no cache): decode the source to (re)generate the preview.
             if im is None:
@@ -905,16 +913,9 @@ class PhotoProcessor:
             )
 
             content_hash = self.preview_generator._get_content_hash(image_path)
-            preview_cached = False
-            if self.cache and not convert_needed:
-                cached_hash = self.cache.get("preview_hash", image_path)
-                cached_colors = self.cache.get("colors", image_path)
-                preview_out = previews_dir / f"{slugify(image_path.stem)}-{content_hash}.webp"
-                preview_cached = bool(
-                    cached_hash == content_hash and cached_colors and preview_out.exists()
-                )
-
-            decode_needed = convert_needed or not preview_cached
+            decode_needed = convert_needed or not self.preview_generator.cached_preview(
+                image_path, previews_dir, content_hash
+            )
 
             # Open and normalize orientation once; reuse the decoded image for
             # both the full WebP and the preview so the source is read a single time.
