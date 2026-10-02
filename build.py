@@ -16,7 +16,7 @@ import urllib.request
 import urllib.parse
 from pathlib import Path
 from PIL import Image, ExifTags, ImageOps
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Dict, List, Tuple, Any
 from functools import lru_cache
@@ -467,7 +467,7 @@ class Config:
     source_dir: Path
     out_dir: Path
     cache_dir: Path = Path("cache")
-    max_preview_height: int = DEFAULT_PREVIEW_HEIGHT
+    preview_height: int = DEFAULT_PREVIEW_HEIGHT
     preload_count: int = 20
     workers: int = 4
     geocode: bool = False
@@ -476,18 +476,26 @@ class Config:
     title: str = "[photostream]"
     description: str = ""
     footer: str = ""
-    link1_title: str = ""
-    link1_url: str = ""
-    link2_title: str = ""
-    link2_url: str = ""
-    link3_title: str = ""
-    link3_url: str = ""
+    links: Tuple[Tuple[str, str], ...] = ()  # (title, url) footer links
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "Config":
+        """Build from parsed arguments; field names match the OPTIONS dests."""
+        links = ((getattr(args, f"link{n}_title"), getattr(args, f"link{n}_url")) for n in (1, 2, 3))
+        names = {f.name for f in fields(cls)} - {"source_dir", "links"}
+        return cls(
+            source_dir=args.folder,
+            links=tuple((t, u) for t, u in links if t and u),
+            **{name: getattr(args, name) for name in names},
+        )
 
     def __post_init__(self):
         if not self.source_dir.exists():
             raise ValueError(f"Source directory does not exist: {self.source_dir}")
-        if self.max_preview_height <= 0:
-            raise ValueError(f"Max preview height must be positive: {self.max_preview_height}")
+        if self.preview_height <= 0:
+            raise ValueError(f"Max preview height must be positive: {self.preview_height}")
+        if self.page_size <= 0:
+            raise ValueError(f"Page size must be positive: {self.page_size}")
         if self.workers <= 0:
             object.__setattr__(self, 'workers', os.cpu_count() or 4)
         if self.cache_dir.resolve().is_relative_to(self.out_dir.resolve()):
@@ -607,7 +615,7 @@ class PreviewGenerator:
         try:
             stat = src.stat()
             hasher = hashlib.sha256()
-            hasher.update(f"{src.name}:{stat.st_size}:{int(stat.st_mtime)}:{self.config.max_preview_height}".encode())
+            hasher.update(f"{src.name}:{stat.st_size}:{int(stat.st_mtime)}:{self.config.preview_height}".encode())
             with open(src, 'rb') as f:
                 hasher.update(f.read(1024))
             return hasher.hexdigest()[:16]
@@ -674,7 +682,7 @@ class PreviewGenerator:
 
                 pw, ph = im.size
                 # Scale based on height for consistent gallery loading
-                scale = min(1.0, self.config.max_preview_height / float(ph)) if self.config.max_preview_height > 0 else 1.0
+                scale = min(1.0, self.config.preview_height / float(ph)) if self.config.preview_height > 0 else 1.0
                 new_w = max(1, int(round(pw * scale)))
                 new_h = max(1, int(round(ph * scale)))
                 if (new_w, new_h) != (pw, ph):
@@ -764,24 +772,6 @@ class PreviewGenerator:
 
 
 
-@dataclass
-class IndexPageContext:
-    """Context data for rendering the index page."""
-    photos_json: str
-    preload_images: List[Dict[str, Any]] = None
-    preload_count: int = 20
-    photos: List[Dict[str, Any]] = None
-    title: str = "[photostream]"
-    description: str = ""
-    footer: str = ""
-    link1_title: str = ""
-    link1_url: str = ""
-    link2_title: str = ""
-    link2_url: str = ""
-    link3_title: str = ""
-    link3_url: str = ""
-
-
 class TemplateRenderer:
     """Handles HTML template rendering with Jinja2."""
 
@@ -820,24 +810,10 @@ class TemplateRenderer:
         
         return templates
     
-    def render_index(self, ctx: IndexPageContext) -> str:
+    def render_index(self, **ctx) -> str:
         """Render the main index page with photo grid."""
-        return self._env.get_template('index.html').render(
-            photos_json=ctx.photos_json,
-            photos=ctx.photos or [],
-            preload_images=ctx.preload_images or [],
-            preload_count=ctx.preload_count,
-            title=ctx.title,
-            description=ctx.description,
-            footer=ctx.footer,
-            link1_title=ctx.link1_title,
-            link1_url=ctx.link1_url,
-            link2_title=ctx.link2_title,
-            link2_url=ctx.link2_url,
-            link3_title=ctx.link3_title,
-            link3_url=ctx.link3_url
-        )
-    
+        return self._env.get_template('index.html').render(**ctx)
+
     def render_photo(self, **ctx) -> str:
         """Render individual photo page."""
         return self._env.get_template('photo.html').render(**ctx)
@@ -1083,7 +1059,7 @@ class PhotoProcessor:
         datetime_lookup = {p: dt for p, dt in images_with_dates}
 
         total = len(ordered)
-        print(f"Found {total} images. Generating previews (max height {self.config.max_preview_height}px)...", flush=True)
+        print(f"Found {total} images. Generating previews (max height {self.config.preview_height}px)...", flush=True)
 
         # Prepare directories
         view_dir = self.config.out_dir / "view"
@@ -1166,22 +1142,16 @@ class PhotoProcessor:
         preload_images = public_meta[:self.config.preload_count]
         first_page_photos = public_meta[:page_size]
 
-        index_ctx = IndexPageContext(
+        index_html = self.template_renderer.render_index(
             photos_json=json.dumps(first_page_photos, ensure_ascii=False),
+            photos=first_page_photos,
             preload_images=preload_images,
             preload_count=self.config.preload_count,
-            photos=first_page_photos,
             title=self.config.title,
             description=self.config.description,
             footer=self.config.footer,
-            link1_title=self.config.link1_title,
-            link1_url=self.config.link1_url,
-            link2_title=self.config.link2_title,
-            link2_url=self.config.link2_url,
-            link3_title=self.config.link3_title,
-            link3_url=self.config.link3_url
+            links=[{"title": t, "url": u} for t, u in self.config.links],
         )
-        index_html = self.template_renderer.render_index(index_ctx)
         _atomic_write_text(self.config.out_dir / "index.html", index_html)
 
         # Write per-photo pages
@@ -1250,191 +1220,104 @@ class PhotoProcessor:
 
 
 
+@dataclass(frozen=True)
+class Option:
+    """One setting: read from config.ini when it has a `section`, exposed as a
+    CLI flag when it has `help`, and handed to Config under `dest`."""
+    dest: str
+    type: Any
+    default: Any
+    help: Optional[str] = None
+    section: Optional[str] = None
+    key: Optional[str] = None  # config.ini key, when it differs from dest
+
+
+# The single list of settings. Config file, CLI flags and Config all derive from it.
+OPTIONS = [
+    Option("folder", Path, "./originals", section="build"),  # the positional argument
+    Option("out_dir", Path, "./site", "Directory to write index.html, previews/ and view/ to.", "build"),
+    Option("cache_dir", Path, "./cache", "Directory for the metadata cache. Must be outside --out-dir: it holds GPS data.", "build"),
+    Option("workers", int, os.cpu_count() or 4, "Worker threads for image processing.", "build"),
+    Option("template_dir", Path, None, "Directory with custom index.html and photo.html; unset uses templates/ next to build.py.", "build"),
+    Option("preview_height", int, DEFAULT_PREVIEW_HEIGHT, "Max height of grid preview images in pixels; lower means smaller files.", "build"),
+    Option("preload_count", int, 20, "Number of first images to preload for LCP.", "build"),
+    Option("page_size", int, 30, "Photos per page for infinite scroll.", "build"),
+    Option("rename", bool, False, "Rename source images to their EXIF datetime (YYYY-MM-DD-HH-MM-SS.ext) before building.", "build"),
+    Option("geocode", bool, False, "Reverse geocode GPS coordinates to city/country (needs internet).", "build"),
+    Option("regeocode", bool, False, "Retry geocoding photos whose earlier lookup found no location. Requires --geocode.", "build"),
+    Option("title", str, "[photostream]", "Gallery title.", "gallery"),
+    Option("description", str, "", "Text under the title.", "gallery"),
+    Option("footer", str, "", "Footer text at the bottom right.", "gallery"),
+    *(Option(f"link{n}_{part}", str, "", f"{part.capitalize()} of footer link {n}.", "gallery")
+      for n in (1, 2, 3) for part in ("title", "url")),
+    Option("deploy_method", str, "", "Deployment method: rsync, rclone or robocopy. When set in config.ini, every build deploys.",
+           "deployment", key="method"),
+    Option("rsync_destination", str, "", section="deployment"),
+    Option("rclone_destination", str, "", section="deployment"),
+    Option("robocopy_destination", str, "", section="deployment"),
+]
+
+
 def load_config_file(config_path: Path = Path("config.ini")) -> Dict[str, Any]:
-    """Load configuration from INI file if it exists."""
-    config_defaults = {
-        "folder": "./originals",
-        "out_dir": "./site",
-        "cache_dir": "./cache",
-        "workers": os.cpu_count() or 4,
-        "template_dir": None,
-        "preview_height": DEFAULT_PREVIEW_HEIGHT,
-        "preload_count": 20,
-        "page_size": 30,
-        "rename": False,
-        "title": "[photostream]",
-        "description": "",
-        "footer": "",
-        "link1_title": "",
-        "link1_url": "",
-        "link2_title": "",
-        "link2_url": "",
-        "link3_title": "",
-        "link3_url": "",
-        "geocode": False,
-        "regeocode": False,
-        "deployment_method": "",
-        "rsync_destination": "",
-        "rclone_destination": "",
-        "robocopy_destination": "",
-    }
+    """OPTIONS defaults overlaid with the INI file's values (if the file exists).
 
+    An empty value keeps the default, so `workers =` means "number of CPU
+    cores". An invalid value raises ValueError naming the key.
+    """
+    values = {o.dest: o.default for o in OPTIONS}
     if not config_path.exists():
-        return config_defaults
-
-    try:
-        config = configparser.ConfigParser()
-        config.read(config_path)
-
-        # Parse build settings
-        if "build" in config:
-            build_section = config["build"]
-            if "folder" in build_section:
-                config_defaults["folder"] = build_section["folder"]
-            if "out_dir" in build_section:
-                config_defaults["out_dir"] = build_section["out_dir"]
-            if "cache_dir" in build_section and build_section["cache_dir"]:
-                config_defaults["cache_dir"] = build_section["cache_dir"]
-            if "workers" in build_section:
-                config_defaults["workers"] = build_section.getint("workers")
-            if "template_dir" in build_section and build_section["template_dir"]:
-                config_defaults["template_dir"] = build_section["template_dir"]
-            if "preview_height" in build_section:
-                config_defaults["preview_height"] = build_section.getint("preview_height")
-            if "preload_count" in build_section:
-                config_defaults["preload_count"] = build_section.getint("preload_count")
-            if "page_size" in build_section:
-                config_defaults["page_size"] = build_section.getint("page_size")
-            if "rename" in build_section:
-                config_defaults["rename"] = build_section.getboolean("rename")
-            if "geocode" in build_section:
-                config_defaults["geocode"] = build_section.getboolean("geocode")
-            if "regeocode" in build_section:
-                config_defaults["regeocode"] = build_section.getboolean("regeocode")
-
-        # Parse gallery settings
-        if "gallery" in config:
-            gallery_section = config["gallery"]
-            if "title" in gallery_section:
-                config_defaults["title"] = gallery_section["title"]
-            if "description" in gallery_section:
-                config_defaults["description"] = gallery_section["description"]
-            if "footer" in gallery_section:
-                config_defaults["footer"] = gallery_section["footer"]
-            if "link1_title" in gallery_section:
-                config_defaults["link1_title"] = gallery_section["link1_title"]
-            if "link1_url" in gallery_section:
-                config_defaults["link1_url"] = gallery_section["link1_url"]
-            if "link2_title" in gallery_section:
-                config_defaults["link2_title"] = gallery_section["link2_title"]
-            if "link2_url" in gallery_section:
-                config_defaults["link2_url"] = gallery_section["link2_url"]
-            if "link3_title" in gallery_section:
-                config_defaults["link3_title"] = gallery_section["link3_title"]
-            if "link3_url" in gallery_section:
-                config_defaults["link3_url"] = gallery_section["link3_url"]
-
-        # Parse deployment settings
-        if "deployment" in config:
-            deployment_section = config["deployment"]
-            if "method" in deployment_section:
-                config_defaults["deployment_method"] = deployment_section["method"]
-            if "rsync_destination" in deployment_section:
-                config_defaults["rsync_destination"] = deployment_section["rsync_destination"]
-            if "rclone_destination" in deployment_section:
-                config_defaults["rclone_destination"] = deployment_section["rclone_destination"]
-            if "robocopy_destination" in deployment_section:
-                config_defaults["robocopy_destination"] = deployment_section["robocopy_destination"]
-
-        return config_defaults
-    except Exception as e:
-        print(f"Warning: Error reading config file {config_path}: {e}", file=sys.stderr)
-        return config_defaults
+        return values
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+    for o in OPTIONS:
+        key = o.key or o.dest
+        raw = parser.get(o.section, key, fallback="") if o.section else ""
+        if not raw:
+            continue
+        try:
+            if o.type is bool:
+                values[o.dest] = parser.getboolean(o.section, key)
+            else:
+                values[o.dest] = o.type(raw)
+        except ValueError as e:
+            raise ValueError(f"{config_path}: [{o.section}] {key}: {e}") from None
+    return values
 
 
-def parse_args():
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments with config file support.
 
     The config file path is resolved first (via a pre-parser) so a custom
     ``--config`` is honored. Its values become argparse defaults; any flag
     passed on the command line overrides the corresponding config value.
+    Every OPTIONS value, flag or not, ends up on the returned namespace.
     """
-    # First pass: only resolve the config file path so a custom --config wins.
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--config", type=Path, default=Path("config.ini"))
-    pre_args, _ = pre_parser.parse_known_args()
-    config_defaults = load_config_file(pre_args.config)
+    pre_args, _ = pre_parser.parse_known_args(argv)
+    try:
+        values = load_config_file(pre_args.config)
+    except ValueError as e:
+        raise SystemExit(f"Configuration error: {e}")
 
     ap = argparse.ArgumentParser(
-        description="Generate a justified photo gallery with per-photo pages (newest first)."
+        description="Generate a justified photo gallery with per-photo pages (newest first).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    ap.add_argument("folder", nargs="?", type=Path,
-                    help="Folder containing photos (scanned recursively).")
-    ap.add_argument("--config", type=Path, default=Path("config.ini"),
-                    help="Path to configuration file (default: config.ini).")
-    ap.add_argument("--out-dir", type=Path,
-                    help="Directory to write index.html, previews/, and view/. Defaults to current working directory.")
-    ap.add_argument("--cache-dir", type=Path,
-                    help="Directory for the metadata cache (default: ./cache). Keep it outside --out-dir: it holds GPS data.")
-    ap.add_argument("--workers", type=int,
-                    help="Number of worker threads to use for image processing (default: number of CPU cores).")
-    ap.add_argument("--template-dir", type=Path,
-                    help="Directory containing custom templates (index.html, photo.html). Defaults to ./templates/")
-    ap.add_argument("--preview-height", type=int,
-                    help=f"Maximum height for preview images in pixels (default: {config_defaults['preview_height']}). Lower values reduce file sizes and improve loading speed.")
-    ap.add_argument("--preload-count", type=int,
-                    help=f"Number of first images to preload for LCP optimization (default: {config_defaults['preload_count']}). Higher values may slow initial page load.")
-    ap.add_argument("--page-size", type=int,
-                    help=f"Number of photos to load per page for infinite scroll (default: {config_defaults['page_size']}).")
-    ap.add_argument("--rename", action="store_true",
-                    help="Rename image files based on EXIF datetime (format: YYYY-MM-DD-HH-MM-SS.ext) before processing.")
-    ap.add_argument("--title", type=str,
-                    help=f"Title for the gallery site (default: '{config_defaults['title']}').")
-    ap.add_argument("--description", type=str,
-                    help="Description text to display under the title (default: empty).")
-    ap.add_argument("--footer", type=str,
-                    help="Footer text to display at bottom-right of the page (default: empty).")
-    ap.add_argument("--link1-title", type=str, help="Title for first footer link (default: empty).")
-    ap.add_argument("--link1-url", type=str, help="URL for first footer link (default: empty).")
-    ap.add_argument("--link2-title", type=str, help="Title for second footer link (default: empty).")
-    ap.add_argument("--link2-url", type=str, help="URL for second footer link (default: empty).")
-    ap.add_argument("--link3-title", type=str, help="Title for third footer link (default: empty).")
-    ap.add_argument("--link3-url", type=str, help="URL for third footer link (default: empty).")
-    ap.add_argument("--geocode", action="store_true",
-                    help="Enable reverse geocoding to extract city names from GPS coordinates (requires internet connection).")
-    ap.add_argument("--regeocode", action="store_true",
-                    help="Force re-geocoding of all images, ignoring cached location data. Requires --geocode flag.")
+    ap.add_argument("folder", nargs="?", type=Path, help="Folder containing photos (scanned recursively).")
+    ap.add_argument("--config", type=Path, default=Path("config.ini"), help="Path to the configuration file.")
+    for o in OPTIONS:
+        if o.help is None:
+            continue
+        flag = "--" + o.dest.replace("_", "-")
+        if o.type is bool:
+            ap.add_argument(flag, action=argparse.BooleanOptionalAction, help=o.help)
+        else:
+            ap.add_argument(flag, type=o.type, help=o.help)
     ap.add_argument("--deploy", action="store_true",
-                    help="Deploy the gallery after building (requires deployment configuration in config.ini).")
-    ap.add_argument("--deploy-method", type=str,
-                    help="Deployment method: rsync, rclone, or robocopy (overrides config.ini).")
-
-    # Config-file values act as defaults; CLI flags override them.
-    ap.set_defaults(
-        folder=config_defaults["folder"],
-        out_dir=config_defaults["out_dir"],
-        cache_dir=config_defaults["cache_dir"],
-        workers=config_defaults["workers"],
-        template_dir=config_defaults["template_dir"],
-        preview_height=config_defaults["preview_height"],
-        preload_count=config_defaults["preload_count"],
-        page_size=config_defaults["page_size"],
-        rename=config_defaults["rename"],
-        title=config_defaults["title"],
-        description=config_defaults["description"],
-        footer=config_defaults["footer"],
-        link1_title=config_defaults["link1_title"],
-        link1_url=config_defaults["link1_url"],
-        link2_title=config_defaults["link2_title"],
-        link2_url=config_defaults["link2_url"],
-        link3_title=config_defaults["link3_title"],
-        link3_url=config_defaults["link3_url"],
-        geocode=config_defaults["geocode"],
-        regeocode=config_defaults["regeocode"],
-        deploy_method=config_defaults["deployment_method"],
-    )
-
-    return ap.parse_args()
+                    help="Deploy after building, using the method and destination from config.ini or --deploy-method.")
+    ap.set_defaults(**values)  # config.ini values are the defaults; CLI flags override them
+    return ap.parse_args(argv)
 
 
 def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any]) -> bool:
@@ -1532,38 +1415,16 @@ def main():
                     renamed_count += 1
             print(f"Renamed {renamed_count} of {len(images)} images.")
 
-        config = Config(
-            source_dir=args.folder,
-            out_dir=Path(args.out_dir),
-            cache_dir=Path(args.cache_dir),
-            max_preview_height=args.preview_height,
-            preload_count=args.preload_count,
-            page_size=args.page_size,
-            workers=args.workers,
-            geocode=args.geocode,
-            regeocode=args.regeocode,
-            title=args.title,
-            description=args.description,
-            footer=args.footer,
-            link1_title=args.link1_title,
-            link1_url=args.link1_url,
-            link2_title=args.link2_title,
-            link2_url=args.link2_url,
-            link3_title=args.link3_title,
-            link3_url=args.link3_url
-        )
+        config = Config.from_args(args)
         processor = PhotoProcessor(config, args.template_dir)
         processor.build_gallery()
 
         # Deploy if requested
         if args.deploy or args.deploy_method:
-            config_defaults = load_config_file(args.config)
-            deploy_method = args.deploy_method or config_defaults.get("deployment_method", "")
-            if deploy_method:
-                if not deploy_gallery(config.out_dir, deploy_method, config_defaults):
-                    sys.exit(1)
-            else:
+            if not args.deploy_method:
                 print("Warning: --deploy specified but no deployment method configured", file=sys.stderr)
+            elif not deploy_gallery(config.out_dir, args.deploy_method, vars(args)):
+                sys.exit(1)
 
     except ValueError as e:
         print(f"Configuration error: {e}", file=sys.stderr)

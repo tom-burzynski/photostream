@@ -2,6 +2,7 @@ import contextlib
 import datetime as dt
 import io
 import json
+import os
 import pickle
 import tempfile
 import unittest
@@ -241,9 +242,9 @@ class StaleOutputTests(unittest.TestCase):
         self.assertEqual(self._files("data", "page_*.json"), ["page_0.json"])
 
     def test_preview_height_change_regenerates_previews(self):
-        _build(self.src, self.site, self.tmp / "cache", max_preview_height=20)
+        _build(self.src, self.site, self.tmp / "cache", preview_height=20)
         before = self._files("previews", "*.webp")
-        _build(self.src, self.site, self.tmp / "cache", max_preview_height=10)
+        _build(self.src, self.site, self.tmp / "cache", preview_height=10)
         after = self._files("previews", "*.webp")
         self.assertEqual(len(after), 2)
         self.assertFalse(set(before) & set(after))
@@ -327,6 +328,41 @@ class WarmRebuildTests(unittest.TestCase):
         with mock.patch.object(build.Image, "open", side_effect=AssertionError("decoded")):
             _build(src, tmp / "site", tmp / "cache")
         self.assertEqual(len(list((tmp / "site" / "view").glob("*.html"))), 2)
+
+
+class OptionsTests(unittest.TestCase):
+    def _ini(self, text):
+        p = Path(tempfile.mkdtemp()) / "config.ini"
+        p.write_text(text)
+        return p
+
+    def test_empty_value_keeps_default_and_later_keys_still_apply(self):
+        # `workers =` used to abort parsing and silently drop every later key
+        values = build.load_config_file(self._ini("[build]\nworkers =\npreview_height = 123\n[gallery]\ntitle = T\n"))
+        self.assertEqual(values["workers"], os.cpu_count() or 4)
+        self.assertEqual(values["preview_height"], 123)
+        self.assertEqual(values["title"], "T")
+
+    def test_invalid_value_names_the_key(self):
+        with self.assertRaisesRegex(ValueError, r"\[build\] page_size"):
+            build.load_config_file(self._ini("[build]\npage_size = lots\n"))
+
+    def test_cli_overrides_config_including_booleans(self):
+        ini = self._ini("[build]\nrename = true\npreview_height = 300\n[deployment]\nmethod = rclone\nrclone_destination = r:x\n")
+        args = build.parse_args(["--config", str(ini), "--no-rename", "--preview-height", "50"])
+        self.assertFalse(args.rename)
+        self.assertEqual(args.preview_height, 50)
+        self.assertEqual(args.deploy_method, "rclone")
+        self.assertEqual(args.rclone_destination, "r:x")  # ini-only settings reach the namespace too
+
+    def test_config_from_args_keeps_complete_links_only(self):
+        tmp = Path(tempfile.mkdtemp())
+        (tmp / "photos").mkdir()
+        ini = self._ini(f"[build]\nfolder = {tmp / 'photos'}\nout_dir = {tmp / 'site'}\ncache_dir = {tmp / 'cache'}\n"
+                        "[gallery]\nlink1_title = A\nlink1_url = https://a\nlink2_title = no url\nlink3_title = C\nlink3_url = https://c\n")
+        cfg = build.Config.from_args(build.parse_args(["--config", str(ini)]))
+        self.assertEqual(cfg.links, (("A", "https://a"), ("C", "https://c")))
+        self.assertEqual(cfg.source_dir, tmp / "photos")
 
 
 if __name__ == "__main__":
