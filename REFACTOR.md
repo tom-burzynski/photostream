@@ -160,3 +160,40 @@ Checklist of fixes to apply. Each item references the finding above.
 - [x] **#12** Add unit tests (`tests/test_build.py`, unittest) for `slugify`,
       `_format_time`, EXIF `extract_datetime`, and the extracted
       `_assign_unique_ids` dedup helper. (`build.py:53`, `build.py:1042`)
+
+## Second pass (2026-10-02)
+
+Fresh review after the tasks above. Branch `fixes-2026-10`, one commit per item.
+
+- [x] **Cache published with the site.** `.metadata_cache.pkl` lived in
+      `site/data/` and was deployed, publishing exact GPS coordinates for 508
+      photos. Moved to `--cache-dir` (default `./cache`), JSON instead of
+      pickle, legacy file imported and deleted; `Config` refuses a cache
+      inside out_dir. `original_path` no longer written to public JSON.
+      Generic `get/set(kind)` API, cache key computed once per file.
+- [x] **Stale outputs never removed.** Removed/renamed photos stayed on the
+      site. Build now deletes unreferenced previews, full WebPs, view pages
+      and surplus `page_N.json` (skipped when no photo built).
+- [x] **Preview hash** included the absolute path (Docker vs local rebuilt
+      everything) and not the preview height (changing it kept old sizes).
+- [x] **Double escaping** of photo title/alt (html.escape + autoescape).
+- [x] **Geocoding** throttled to 1 req/s with an identifying User-Agent.
+- [x] **Deploy failure** exits non-zero.
+- [x] **Atomic writes** for index, JSON pages, photo pages and the cache.
+- [x] **Preview cache check** shared by the decode gate and generate_preview.
+- [x] **OPTIONS table** replaces seven copies of the settings list. Also
+      fixes: empty INI value (`workers =`) aborted parsing and dropped every
+      later key; invalid values are now errors; `--no-<flag>` for booleans.
+- [x] **Docker watcher**: argument array instead of eval (quotes broke the
+      build, `$(...)` executed); dead inotify branch removed (probe always
+      failed; inotify cannot see macOS host-side changes anyway); debounced
+      polling; failed build no longer kills the watcher; broken healthcheck
+      removed.
+- [x] **Docker/CI**: Python 3.14 image, unit tests run in CI, jhead and
+      unused LOG_LEVEL removed.
+
+Open:
+- [ ] Sources sharing a stem (`x.jpeg` + `x.png`) map to the same
+      `originals/x.webp`; one overwrites the other and both pages show it.
+- [ ] Container still runs as root (switching needs bind-mount ownership
+      handled, e.g. a PUID/PGID option).
