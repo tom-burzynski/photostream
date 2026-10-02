@@ -48,13 +48,4 @@ services:
       # Watcher settings
       - WATCH_DELAY=${WATCH_DELAY}             # Seconds to wait after file change
       - RUN_ON_STARTUP=${RUN_ON_STARTUP}       # Build gallery on container start
-      - LOG_LEVEL=${LOG_LEVEL}                 # Logging level
       - WEB_SERVER_PORT=${WEB_SERVER_PORT:-8080}  # Port for live preview web server
-
-    # Health check
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "inotifywait"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
