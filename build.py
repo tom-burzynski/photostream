@@ -8,6 +8,7 @@ import unicodedata
 import os
 import sys
 import shutil
+import subprocess
 import hashlib
 import pickle
 import time
@@ -1435,11 +1436,12 @@ def parse_args():
     return ap.parse_args()
 
 
-def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any]) -> None:
-    """Deploy the gallery to a remote destination using the specified method."""
+def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any]) -> bool:
+    """Deploy the gallery to a remote destination using the specified method.
+    Returns False if the deployment failed."""
     if not method:
         print("No deployment method specified. Skipping deployment.", flush=True)
-        return
+        return True
 
     print(f"\nDeploying gallery using {method}...", flush=True)
 
@@ -1447,62 +1449,69 @@ def deploy_gallery(output_dir: Path, method: str, config_defaults: Dict[str, Any
         destination = config_defaults.get("rsync_destination", "")
         if not destination:
             print("Error: rsync method specified but rsync_destination not configured", file=sys.stderr)
-            return
+            return False
 
         cmd = ["rsync", "-avu", "--delete", f"{output_dir}/", destination]
         try:
-            import subprocess
             result = subprocess.run(cmd, check=True, capture_output=True, text=True)
             print(result.stdout, flush=True)
             print(f"Successfully deployed to {destination} via rsync", flush=True)
+            return True
         except subprocess.CalledProcessError as e:
             print(f"Error deploying via rsync: {e}", file=sys.stderr)
             print(e.stderr, file=sys.stderr)
+            return False
         except FileNotFoundError:
             print("Error: rsync command not found. Please install rsync.", file=sys.stderr)
+            return False
 
     elif method == "rclone":
         destination = config_defaults.get("rclone_destination", "")
         if not destination:
             print("Error: rclone method specified but rclone_destination not configured", file=sys.stderr)
-            return
+            return False
 
         print(f"Syncing {output_dir} to {destination}...", flush=True)
         cmd = ["rclone", "sync", "--progress", str(output_dir), destination]
         try:
-            import subprocess
             # Run rclone with direct output to terminal (no capture)
             result = subprocess.run(cmd)
 
             if result.returncode == 0:
                 print(f"\nSuccessfully deployed to {destination} via rclone", flush=True)
+                return True
             else:
                 print(f"\nError deploying via rclone (exit code {result.returncode})", file=sys.stderr)
+                return False
         except FileNotFoundError:
             print("Error: rclone command not found. Please install rclone.", file=sys.stderr)
+            return False
 
     elif method == "robocopy":
         destination = config_defaults.get("robocopy_destination", "")
         if not destination:
             print("Error: robocopy method specified but robocopy_destination not configured", file=sys.stderr)
-            return
+            return False
 
         cmd = ["robocopy", str(output_dir), destination, "/MIR", "/R:3", "/W:5", "/MT:8"]
         try:
-            import subprocess
             # Robocopy returns exit code 1 for success with files copied
             result = subprocess.run(cmd, capture_output=True, text=True)
             print(result.stdout, flush=True)
             if result.returncode <= 7:  # Robocopy exit codes 0-7 are success/warnings
                 print(f"Successfully deployed to {destination} via robocopy", flush=True)
+                return True
             else:
                 print(f"Error deploying via robocopy (exit code {result.returncode})", file=sys.stderr)
                 print(result.stderr, file=sys.stderr)
+                return False
         except FileNotFoundError:
             print("Error: robocopy command not found (Windows only).", file=sys.stderr)
+            return False
 
     else:
         print(f"Error: Unknown deployment method: {method}", file=sys.stderr)
+        return False
 
 
 def main():
@@ -1550,7 +1559,8 @@ def main():
             config_defaults = load_config_file(args.config)
             deploy_method = args.deploy_method or config_defaults.get("deployment_method", "")
             if deploy_method:
-                deploy_gallery(config.out_dir, deploy_method, config_defaults)
+                if not deploy_gallery(config.out_dir, deploy_method, config_defaults):
+                    sys.exit(1)
             else:
                 print("Warning: --deploy specified but no deployment method configured", file=sys.stderr)
 

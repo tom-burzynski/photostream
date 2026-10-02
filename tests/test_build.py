@@ -300,5 +300,19 @@ class GeocodeThrottleTests(unittest.TestCase):
         self.assertIn("github.com/tom-burzynski/photostream", build.GEOCODE_USER_AGENT)
 
 
+class DeployResultTests(unittest.TestCase):
+    def test_failures_return_false(self):
+        from unittest import mock
+
+        out = Path(tempfile.mkdtemp())
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(build.deploy_gallery(out, "ftp", {}))
+            self.assertFalse(build.deploy_gallery(out, "rclone", {}))  # no destination
+            with mock.patch.object(build.subprocess, "run", return_value=mock.Mock(returncode=3)):
+                self.assertFalse(build.deploy_gallery(out, "rclone", {"rclone_destination": "x:y"}))
+            with mock.patch.object(build.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                self.assertTrue(build.deploy_gallery(out, "rclone", {"rclone_destination": "x:y"}))
+
+
 if __name__ == "__main__":
     unittest.main()
